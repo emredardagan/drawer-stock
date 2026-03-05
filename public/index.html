@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Çekmece Stoğu</title>
+  <link rel="stylesheet" href="style.css">
+  <script>
+    (function() {
+      var h = window.location.hostname;
+      if (h !== 'localhost' && h !== '127.0.0.1') {
+        document.documentElement.classList.add('remote-view');
+      }
+    })();
+  </script>
+  <style>
+    html.remote-view .admin-bar,
+    html.remote-view .add-product-section,
+    html.remote-view .btn-add-product { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="loading-overlay" id="loadingOverlay" aria-hidden="true">
+    <div class="loading-content">
+      <svg class="loading-svg" width="300" height="250" viewBox="0 0 250 200" xmlns="http://www.w3.org/2000/svg">
+        <style>
+          @keyframes isometricSlideRight {
+            0%, 100% { transform: translate(0, 0); }
+            50% { transform: translate(25px, 12px); }
+          }
+          #cekmece2_grubu {
+            animation: isometricSlideRight 3s ease-in-out infinite;
+          }
+        </style>
+        <defs>
+          <linearGradient id="frontGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#d0d0d0" />
+            <stop offset="100%" stop-color="#a8a8a8" />
+          </linearGradient>
+          <linearGradient id="sideGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#b0b0b0" />
+            <stop offset="100%" stop-color="#888888" />
+          </linearGradient>
+        </defs>
+        <path d="M 50 40 L 15 20 L 15 155 L 50 175 Z" fill="url(#sideGrad)" stroke="#666" stroke-width="1"/>
+        <path d="M 170 40 L 135 20 L 15 20 L 50 40 Z" fill="#e8e8e8" stroke="#666" stroke-width="1"/>
+        <rect x="50" y="40" width="120" height="135" fill="url(#frontGrad)" stroke="#777" stroke-width="1.2" />
+        <g id="cekmece1">
+          <rect x="55" y="48" width="110" height="28" fill="#fcfcfc" stroke="#b0b0b0" />
+          <rect x="95" y="59" width="30" height="5" rx="2" fill="#666" />
+          <circle cx="152" cy="56" r="2.5" fill="#444" />
+        </g>
+        <g id="cekmece2_grubu">
+          <rect x="55" y="82" width="110" height="88" fill="#fcfcfc" stroke="#b0b0b0" />
+          <rect x="95" y="122" width="30" height="7" rx="2" fill="#666" />
+        </g>
+      </svg>
+      <p class="loading-text">Yükleniyor…</p>
+    </div>
+  </div>
+
+  <header class="header">
+    <div class="header-inner">
+      <a href="/" class="logo">ED | ÇEKMECE</a>
+      <div class="search-wrap">
+        <span class="search-icon" aria-hidden="true">🔍</span>
+        <input type="search" class="search-input" placeholder="Atıştırmalık ara..." id="searchInput" aria-label="Ürün ara">
+      </div>
+      <div class="header-right">
+        <div class="admin-bar" id="adminBar">
+          <button type="button" class="btn btn-admin" id="loginBtn">
+            <span class="btn-admin-icon" aria-hidden="true">⚙</span>
+            Admin Girişi
+          </button>
+          <div class="admin-actions" id="adminActions" hidden aria-hidden="true">
+            <button type="button" class="btn btn-add-product" id="btnAddProduct" aria-label="Yeni ürün ekle">
+              <span class="btn-add-icon">+</span>
+              Yeni Ürün Ekle
+            </button>
+            <span class="admin-badge">Admin</span>
+            <button type="button" class="btn btn-outline" id="logoutBtn">Çıkış</button>
+          </div>
+        </div>
+        <div class="user-avatar" aria-hidden="true"></div>
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="hero">
+      <div class="hero-left">
+        <div class="hero-icon-wrap">
+          <span class="hero-icon" aria-hidden="true">🍪</span>
+        </div>
+        <h1 class="hero-title">Çekmece Stoğu</h1>
+        <p class="hero-tagline">Ofisteki abur cubur envanteri ve güncel stok durumu.</p>
+        <button type="button" class="btn btn-donate" id="donateBtn" aria-label="Donate noktalarını göster">🍪🍪 DONATE YAP 🍪🍪</button>
+      </div>
+    </section>
+
+    <div class="donate-overlay" id="donateOverlay" hidden aria-hidden="true">
+      <div class="donate-modal" role="dialog" aria-labelledby="donateModalTitle" aria-modal="true">
+        <div class="donate-modal-header">
+          <h2 id="donateModalTitle">Donate Noktaları</h2>
+          <button type="button" class="donate-close" id="donateClose" aria-label="Kapat">&times;</button>
+        </div>
+        <div class="donate-modal-body">
+          <img src="/img/markets.png" alt="Marketler haritası" class="donate-markets-img" id="donateMarketsImg" onerror="this.style.display='none'">
+          <ul class="donate-address-list" id="donateAddressList">
+            <li>
+              <strong>bonVeno (Destan Sokak)</strong>
+              <span>Yaklaşık 60 metre mesafededir. Yürüyerek 1 dakikadan az sürer.</span>
+            </li>
+            <li>
+              <strong>CarrefourSA (Üsküdar-İçerenköy Yolu)</strong>
+              <span>Yaklaşık 190 metre mesafededir. Yürüyerek 2-3 dakika sürer.</span>
+            </li>
+            <li>
+              <strong>A-101 (Üsküdar-İçerenköy Yolu)</strong>
+              <span>Yaklaşık 200 metre uzaklıktadır. Yürüyerek 3 dakika sürer.</span>
+            </li>
+            <li>
+              <strong>CarrefourSA (City's İstanbul AVM)</strong>
+              <span>Yaklaşık 600 metre mesafededir. Yürüyerek 7-8 dakika sürer.</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <section class="stats-cards" id="statsCards">
+      <div class="stat-card stat-active">
+        <span class="stat-icon stat-icon-check">✓</span>
+        <div class="stat-content">
+          <span class="stat-label">AKTİF ÜRÜN</span>
+          <span class="stat-value" id="statActive">0</span>
+        </div>
+      </div>
+      <div class="stat-card stat-low">
+        <span class="stat-icon stat-icon-warning">!</span>
+        <div class="stat-content">
+          <span class="stat-label">DÜŞÜK STOK</span>
+          <span class="stat-value" id="statLow">0</span>
+        </div>
+      </div>
+      <div class="stat-card stat-depleted">
+        <span class="stat-icon stat-icon-info">i</span>
+        <div class="stat-content">
+          <span class="stat-label">TÜKENEN</span>
+          <span class="stat-value" id="statDepleted">0</span>
+        </div>
+      </div>
+      <div class="stat-card stat-favorite">
+        <span class="stat-icon stat-icon-chart">▤</span>
+        <div class="stat-content">
+          <span class="stat-label">FAVORİ</span>
+          <span class="stat-value stat-favorite-name" id="statFavorite">Cubuk Kraker</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="add-product-section" id="addProductSection" hidden>
+      <h2>Ürün ekle</h2>
+      <form class="add-form" id="addForm">
+        <label>
+          Görsel URL
+          <input type="url" name="imageUrl" placeholder="https://..." id="imageUrl">
+        </label>
+        <label>
+          Ürün adı
+          <input type="text" name="name" placeholder="Örn. Çikolata" required id="productName">
+        </label>
+        <label>
+          Miktar
+          <input type="number" name="quantity" min="0" value="1" required id="quantity">
+        </label>
+        <button type="submit" class="btn btn-primary">Ekle</button>
+      </form>
+    </section>
+
+    <section class="products-section">
+      <div class="products-section-header">
+        <h2>Stoktaki Ürünler</h2>
+      </div>
+      <div class="products-grid" id="productsGrid">
+        <p class="empty-state" id="emptyState">Yükleniyor…</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
