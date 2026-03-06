@@ -150,11 +150,37 @@
           <span class="stat-value" id="statDepleted">0</span>
         </div>
       </div>
-      <div class="stat-card stat-favorite">
-        <span class="stat-icon stat-icon-chart">▤</span>
+      <div class="stat-card stat-filter" id="typeFilterCard">
+        <span class="stat-icon stat-icon-filter" aria-hidden="true">⎇</span>
         <div class="stat-content">
-          <span class="stat-label">FAVORİ</span>
-          <span class="stat-value stat-favorite-name" id="statFavorite">Cubuk Kraker</span>
+          <span class="stat-label">FİLTRE</span>
+          <fieldset class="type-filter">
+            <legend class="sr-only">Tür filtresi</legend>
+            <button type="button" class="type-filter-btn active" data-type="" aria-pressed="true">
+              <span class="type-filter-icon" aria-hidden="true">✨</span>
+            </button>
+            <button type="button" class="type-filter-btn" data-type="Tatlı" aria-pressed="false">
+              <span class="type-filter-icon" aria-hidden="true">🍩</span>
+            </button>
+            <button type="button" class="type-filter-btn" data-type="Tuzlu" aria-pressed="false">
+              <span class="type-filter-icon" aria-hidden="true">🥨</span>
+            </button>
+          </fieldset>
+        </div>
+      </div>
+      <div class="stat-card stat-sort" id="sortCard">
+        <span class="stat-icon stat-icon-sort" aria-hidden="true">⇅</span>
+        <div class="stat-content">
+          <span class="stat-label">SIRALAMA</span>
+          <fieldset class="sort-order">
+            <legend class="sr-only">Stok sıralaması</legend>
+            <button type="button" class="sort-order-btn active" data-order="desc" aria-pressed="true" title="Çoktan aza (azalan)">
+              <span class="sort-order-icon" aria-hidden="true">↓</span>
+            </button>
+            <button type="button" class="sort-order-btn" data-order="asc" aria-pressed="false" title="Azdan çoğa (artan)">
+              <span class="sort-order-icon" aria-hidden="true">↑</span>
+            </button>
+          </fieldset>
         </div>
       </div>
     </section>
@@ -169,6 +195,14 @@
         <label>
           Ürün adı
           <input type="text" name="name" placeholder="Örn. Çikolata" required id="productName">
+        </label>
+        <label>
+          Tür
+          <select name="type" id="productType" aria-label="Ürün türü">
+            <option value="">— Seçiniz —</option>
+            <option value="Tatlı">Tatlı</option>
+            <option value="Tuzlu">Tuzlu</option>
+          </select>
         </label>
         <label>
           Miktar

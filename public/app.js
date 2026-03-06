@@ -18,9 +18,35 @@ const statActive = document.getElementById('statActive');
 const statLow = document.getElementById('statLow');
 const statDepleted = document.getElementById('statDepleted');
 let allProducts = [];
+let selectedTypeFilter = '';
+let sortOrder = 'desc';
+
+function normalizeType(value) {
+  if (value == null) return '';
+  return String(value).trim();
+}
+
+function setSelectedTypeFilter(typeValue) {
+  selectedTypeFilter = normalizeType(typeValue);
+  document.querySelectorAll('.type-filter-btn').forEach((btn) => {
+    const btnType = normalizeType(btn.dataset.type);
+    const isActive = btnType === selectedTypeFilter;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  });
+}
+
+function setSortOrder(order) {
+  sortOrder = order === 'asc' ? 'asc' : 'desc';
+  document.querySelectorAll('.sort-order-btn').forEach((btn) => {
+    const isActive = (btn.dataset.order || '') === sortOrder;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  });
+}
 
 function isLocalhost() {
-  return ['localhost', '127.0.0.1'].includes(window.location.hostname);
+  return ['localhost', '127.0.0.1'].includes(globalThis.location.hostname);
 }
 
 function getToken() {
@@ -117,16 +143,18 @@ async function login(password) {
   updateAdminUI();
 }
 
-async function addProduct(name, imageUrl, quantity) {
+async function addProduct(name, imageUrl, quantity, type) {
   const token = getToken();
   if (!token) return;
+  const payload = { name, imageUrl: imageUrl || '', quantity: Number(quantity) };
+  if (type) payload.type = type;
   const res = await fetch('/api/products', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ name, imageUrl: imageUrl || '', quantity: Number(quantity) }),
+    body: JSON.stringify(payload),
   });
   const data = await parseJsonResponse(res);
   if (!res.ok) throw new Error(data.error || 'Failed to add product');
@@ -195,10 +223,35 @@ function renderProduct(product, isAdmin) {
   const body = document.createElement('div');
   body.className = 'product-body';
 
+  const nameRow = document.createElement('div');
+  nameRow.className = 'product-name-row';
+
   const nameEl = document.createElement('h3');
   nameEl.className = 'product-name';
   nameEl.textContent = product.name;
-  body.appendChild(nameEl);
+  nameRow.appendChild(nameEl);
+
+  const productType = normalizeType(product.type);
+  if (productType) {
+    const typeBadge = document.createElement('span');
+    const t = productType.toLowerCase();
+    const isSweet = t === 'tatlı';
+    const isSalty = t === 'tuzlu';
+    let variantClass = '';
+    let icon = '';
+    if (isSweet) {
+      variantClass = ' sweet';
+      icon = '🍩';
+    } else if (isSalty) {
+      variantClass = ' salty';
+      icon = '🥨';
+    }
+    typeBadge.className = 'product-type-badge product-type-badge-icon-only' + variantClass;
+    typeBadge.textContent = icon;
+    typeBadge.setAttribute('aria-label', productType);
+    nameRow.appendChild(typeBadge);
+  }
+  body.appendChild(nameRow);
 
   const qtyEl = document.createElement('span');
   qtyEl.className = 'product-quantity ' + status;
@@ -219,7 +272,7 @@ function renderProduct(product, isAdmin) {
     updateBtn.className = 'btn-update-qty';
     updateBtn.textContent = 'Güncelle';
     updateBtn.addEventListener('click', async () => {
-      const val = parseInt(qtyInput.value, 10);
+      const val = Number.parseInt(qtyInput.value, 10);
       if (Number.isNaN(val) || val < 0) return;
       try {
         await updateProduct(product.id, { quantity: val });
@@ -246,11 +299,6 @@ function renderProduct(product, isAdmin) {
       }
     });
     body.appendChild(delBtn);
-  } else if (status === 'sold-out') {
-    const btn = document.createElement('span');
-    btn.className = 'btn-stock-expected';
-    btn.textContent = 'Stok Bekleniyor';
-    body.appendChild(btn);
   }
 
   card.appendChild(imgWrap);
@@ -265,32 +313,46 @@ function createStatusBadge(status) {
   return badge;
 }
 
-function filterProducts(products, query) {
-  if (!query || !query.trim()) return products;
+function filterProducts(products, query, typeFilter) {
+  let filtered = products;
+
+  const typeVal = normalizeType(typeFilter);
+  if (typeVal) {
+    filtered = filtered.filter((p) => normalizeType(p.type) === typeVal);
+  }
+
+  if (!query || !query.trim()) return filtered;
   const q = query.trim().toLowerCase();
-  return products.filter(
-    (p) => p.name.toLowerCase().includes(q)
-  );
+  return filtered.filter((p) => p.name.toLowerCase().includes(q));
 }
 
 function renderProducts(products) {
   const isAdmin = !!getToken();
   const query = searchInput ? searchInput.value : '';
-  const filtered = filterProducts(products, query);
+  let filtered = filterProducts(products, query, selectedTypeFilter);
+  const cmp = (a, b) => (a.quantity ?? 0) - (b.quantity ?? 0);
+  filtered = [...filtered].sort(sortOrder === 'asc' ? cmp : (a, b) => -cmp(a, b));
 
   productsGrid.innerHTML = '';
   if (filtered.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'empty-state';
     empty.id = 'emptyState';
-    empty.innerHTML =
-      query.trim()
-        ? '<span class="empty-icon" aria-hidden="true">🔍</span>Arama sonucu bulunamadı.'
-        : '<span class="empty-icon" aria-hidden="true">📭</span>Henüz ürün yok. Admin girişi yapıp ekleyebilirsiniz.';
+    let emptyHtml =
+      '<span class="empty-icon" aria-hidden="true">📭</span>Henüz ürün yok. Admin girişi yapıp ekleyebilirsiniz.';
+    if (selectedTypeFilter) {
+      emptyHtml = '<span class="empty-icon" aria-hidden="true">📭</span>Bu filtrede ürün bulunamadı.';
+    }
+    if (query.trim()) {
+      emptyHtml = '<span class="empty-icon" aria-hidden="true">🔍</span>Arama sonucu bulunamadı.';
+    }
+    empty.innerHTML = emptyHtml;
     productsGrid.appendChild(empty);
+    updateStats(filtered);
     return;
   }
 
+  updateStats(filtered);
   filtered.forEach((p) => productsGrid.appendChild(renderProduct(p, isAdmin)));
 }
 
@@ -299,7 +361,6 @@ async function loadProducts() {
     if (emptyState) emptyState.textContent = 'Yükleniyor…';
     const products = await fetchProducts();
     allProducts = products;
-    updateStats(products);
     renderProducts(products);
   } catch (e) {
     if (emptyState) emptyState.textContent = 'Ürünler yüklenemedi. Sayfayı yenileyin.';
@@ -333,9 +394,10 @@ if (addForm) {
     const name = document.getElementById('productName').value.trim();
     const imageUrl = document.getElementById('imageUrl').value.trim();
     const quantity = document.getElementById('quantity').value;
+    const type = document.getElementById('productType').value.trim() || undefined;
     if (!name) return;
     try {
-      await addProduct(name, imageUrl, quantity);
+      await addProduct(name, imageUrl, quantity, type);
       addForm.reset();
       document.getElementById('quantity').value = 1;
       if (addProductSection) addProductSection.setAttribute('hidden', '');
@@ -425,3 +487,20 @@ if (donateOverlay) {
 
 updateAdminUI();
 loadProducts();
+
+document.querySelectorAll('.type-filter-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    setSelectedTypeFilter(btn.dataset.type || '');
+    renderProducts(allProducts);
+  });
+});
+
+document.querySelectorAll('.sort-order-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    setSortOrder(btn.dataset.order || 'desc');
+    renderProducts(allProducts);
+  });
+});
+
+setSelectedTypeFilter('');
+setSortOrder('desc');

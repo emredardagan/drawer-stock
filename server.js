@@ -36,6 +36,23 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+async function imageUrlToBase64(url) {
+  if (!url || typeof url !== 'string') return url;
+  const trimmed = url.trim();
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return url;
+  try {
+    const res = await fetch(trimmed, { redirect: 'follow' });
+    if (!res.ok) return url;
+    const contentType = res.headers.get('content-type') || 'image/jpeg';
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const base64 = buffer.toString('base64');
+    return `data:${contentType.split(';')[0]};base64,${base64}`;
+  } catch (err) {
+    console.warn('Image URL to base64 failed:', err.message);
+    return url;
+  }
+}
+
 app.get('/api/products', (req, res) => {
   try {
     const products = readProducts();
@@ -55,20 +72,22 @@ app.post('/api/auth/login', (req, res) => {
   res.json({ token });
 });
 
-app.post('/api/products', requireAdmin, (req, res) => {
-  const { name, imageUrl, quantity } = req.body || {};
+app.post('/api/products', requireAdmin, async (req, res) => {
+  const { name, imageUrl, quantity, type } = req.body || {};
   if (!name || quantity == null) {
     return res.status(400).json({ error: 'name and quantity required' });
   }
   try {
+    const resolvedImageUrl = imageUrl ? await imageUrlToBase64(String(imageUrl)) : '';
     const products = readProducts();
     const id = crypto.randomBytes(8).toString('hex');
     const product = {
       id,
       name: String(name),
-      imageUrl: imageUrl ? String(imageUrl) : '',
+      imageUrl: resolvedImageUrl,
       quantity: Number(quantity) || 0,
     };
+    if (type) product.type = String(type);
     products.push(product);
     writeProducts(products);
     res.json(products);
@@ -79,7 +98,7 @@ app.post('/api/products', requireAdmin, (req, res) => {
 
 app.patch('/api/products/:id', requireAdmin, (req, res) => {
   const { id } = req.params;
-  const { name, imageUrl, quantity } = req.body || {};
+  const { name, imageUrl, quantity, type } = req.body || {};
   try {
     const products = readProducts();
     const index = products.findIndex((p) => p.id === id);
@@ -87,6 +106,7 @@ app.patch('/api/products/:id', requireAdmin, (req, res) => {
     if (quantity != null) products[index].quantity = Number(quantity) || 0;
     if (name !== undefined) products[index].name = String(name);
     if (imageUrl !== undefined) products[index].imageUrl = String(imageUrl);
+    if (type !== undefined) products[index].type = String(type);
     writeProducts(products);
     res.json(products);
   } catch (err) {

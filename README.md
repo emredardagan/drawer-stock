@@ -1,6 +1,6 @@
 # Çekmece Stoku
 
-Ofisteki çekmece stokunu takip eden mini web uygulaması. Admin şifre ile giriş yapıp ürün ekleyebilir; herkes stoku görüntüleyebilir.
+Ofisteki çekmece stoğunu takip eden mini web uygulaması. Admin şifre ile giriş yapıp ürün ekleyebilir; herkes stoğu görüntüleyebilir.
 
 ## Kurulum
 
@@ -23,4 +23,4 @@ Veya `.env` kullanıyorsanız:
 npm start
 ```
 
-Tarayıcıda http://localhost:3009 adresine gidin. Admin girişi yapıp ürün ekleyebilirsiniz (görsel URL, ürün adı, miktar).
+Tarayıcıda http://localhost:3009 adresine gidin. Admin girişi yapıp ürün ekleyebilirsiniz (görsel URL, ürün adı,tipi, miktar).
