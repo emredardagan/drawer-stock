@@ -62,9 +62,32 @@
   <header class="header">
     <div class="header-inner">
       <a href="/" class="logo">ED | ÇEKMECE</a>
-      <div class="search-wrap">
-        <span class="search-icon" aria-hidden="true">🔍</span>
-        <input type="search" class="search-input" placeholder="Atıştırmalık ara..." id="searchInput" aria-label="Ürün ara">
+      <div class="header-search-row">
+        <div class="search-wrap">
+          <span class="search-icon" aria-hidden="true">🔍</span>
+          <input type="search" class="search-input" placeholder="Atıştırmalık ara..." id="searchInput" aria-label="Ürün ara">
+        </div>
+        <fieldset class="type-filter type-filter-inline">
+          <legend class="sr-only">Tür filtresi</legend>
+          <button type="button" class="type-filter-btn active" data-type="" aria-pressed="true">
+            <span class="type-filter-icon" aria-hidden="true">✨</span>
+          </button>
+          <button type="button" class="type-filter-btn" data-type="Tatlı" aria-pressed="false">
+            <span class="type-filter-icon" aria-hidden="true">🍩</span>
+          </button>
+          <button type="button" class="type-filter-btn" data-type="Tuzlu" aria-pressed="false">
+            <span class="type-filter-icon" aria-hidden="true">🥨</span>
+          </button>
+        </fieldset>
+        <fieldset class="sort-order sort-order-inline">
+          <legend class="sr-only">Stok sıralaması</legend>
+          <button type="button" class="sort-order-btn active" data-order="desc" aria-pressed="true" title="Çoktan aza">
+            <span class="sort-order-icon" aria-hidden="true">↓</span>
+          </button>
+          <button type="button" class="sort-order-btn" data-order="asc" aria-pressed="false" title="Azdan çoğa">
+            <span class="sort-order-icon" aria-hidden="true">↑</span>
+          </button>
+        </fieldset>
       </div>
       <div class="header-right">
         <div class="admin-bar" id="adminBar">
@@ -81,20 +104,152 @@
             <button type="button" class="btn btn-outline" id="logoutBtn">Çıkış</button>
           </div>
         </div>
+        <button type="button" class="btn btn-user" id="userRegisterBtn" aria-label="Giriş yap">İsim ver / Giriş yap</button>
+        <div class="user-badge" id="userBadge" hidden aria-hidden="true">
+          <button type="button" class="btn btn-wishlist" id="wishlistBtn" aria-label="Rezervasyonlarım">📋 Rezervasyonlarım</button>
+          <span class="user-nickname" id="userNickname"></span>
+          <button type="button" class="btn btn-outline btn-sm" id="userLogoutBtn">Çıkış</button>
+        </div>
         <div class="user-avatar" aria-hidden="true"></div>
       </div>
     </div>
   </header>
 
+  <div class="register-overlay" id="registerOverlay" hidden aria-hidden="true">
+    <div class="register-modal" role="dialog" aria-labelledby="registerModalTitle" aria-modal="true">
+      <div class="register-modal-header">
+        <h2 id="registerModalTitle">Giriş yap / İsim ver</h2>
+        <button type="button" class="register-close" id="registerClose" aria-label="Kapat">&times;</button>
+      </div>
+      <form class="register-form" id="registerForm">
+        <label for="registerNickname">Takma ad <span class="required">*</span></label>
+        <input type="text" id="registerNickname" name="nickname" placeholder="Örn. Çekmece Canavarı" required autocomplete="username">
+        <label for="registerDepartment">Departman (isteğe bağlı)</label>
+        <input type="text" id="registerDepartment" name="department" placeholder="Örn. Yazılım" autocomplete="organization">
+        <button type="submit" class="btn btn-primary">Giriş yap</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="reserve-overlay" id="reserveOverlay" hidden aria-hidden="true">
+    <div class="reserve-modal" role="dialog" aria-labelledby="reserveModalTitle" aria-modal="true">
+      <div class="reserve-modal-header">
+        <h2 id="reserveModalTitle">Rezerve et</h2>
+        <button type="button" class="reserve-close" id="reserveClose" aria-label="Kapat">&times;</button>
+      </div>
+      <form class="reserve-form" id="reserveForm">
+        <p class="reserve-product-name" id="reserveProductName"></p>
+        <label for="reserveQuantity">Adet (1 saat geçerli)</label>
+        <input type="number" id="reserveQuantity" name="quantity" min="1" value="1" required>
+        <button type="submit" class="btn btn-primary">Rezerve et</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="wishlist-overlay" id="wishlistOverlay" hidden aria-hidden="true">
+    <div class="wishlist-modal" role="dialog" aria-labelledby="wishlistModalTitle" aria-modal="true">
+      <div class="wishlist-modal-header">
+        <h2 id="wishlistModalTitle">Rezervasyonlarım</h2>
+        <button type="button" class="wishlist-close" id="wishlistClose" aria-label="Kapat">&times;</button>
+      </div>
+      <div class="wishlist-modal-body" id="wishlistBody">
+        <p class="wishlist-empty" id="wishlistEmpty">Rezervasyonunuz yok.</p>
+        <ul class="wishlist-list" id="wishlistList"></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="leaderboard-overlay" id="leaderboardOverlay" hidden aria-hidden="true">
+    <div class="leaderboard-modal" role="dialog" aria-labelledby="leaderboardModalTitle" aria-modal="true">
+      <div class="leaderboard-modal-header">
+        <h2 id="leaderboardModalTitle">🏆 Kim Ne Yedi? – Çekmece Canavarı</h2>
+        <button type="button" class="leaderboard-close" id="leaderboardClose" aria-label="Kapat">&times;</button>
+      </div>
+      <div class="leaderboard-tabs">
+        <button type="button" class="leaderboard-tab active" data-by="user" id="leaderboardTabUser">Kullanıcıya göre</button>
+        <button type="button" class="leaderboard-tab" data-by="department" id="leaderboardTabDept">Departmana göre</button>
+      </div>
+      <div class="leaderboard-modal-body">
+        <ul class="leaderboard-list" id="leaderboardList"></ul>
+        <p class="leaderboard-empty" id="leaderboardEmpty">Henüz tüketim kaydı yok.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="lucky-overlay" id="luckyOverlay" hidden aria-hidden="true">
+    <div class="lucky-modal" role="dialog" aria-labelledby="luckyModalTitle" aria-modal="true">
+      <div class="lucky-modal-header">
+        <h2 id="luckyModalTitle">🍀 Ne yesem?</h2>
+        <button type="button" class="lucky-close" id="luckyClose" aria-label="Kapat">&times;</button>
+      </div>
+      <div class="lucky-modal-body">
+        <div class="lucky-spinner" id="luckySpinner" aria-hidden="true">🎲</div>
+        <div class="lucky-result" id="luckyResult" hidden>
+          <div class="lucky-result-product" id="luckyResultProduct"></div>
+          <p class="lucky-result-name" id="luckyResultName"></p>
+          <div class="lucky-result-actions" id="luckyResultActions"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="fortune-overlay" id="fortuneOverlay" hidden aria-hidden="true">
+    <div class="fortune-modal" role="dialog" aria-labelledby="fortuneModalTitle" aria-modal="true">
+      <div class="fortune-modal-header">
+        <span class="fortune-icon" aria-hidden="true">🥠</span>
+        <h2 id="fortuneModalTitle">Ofis Falcısı</h2>
+      </div>
+      <div class="fortune-modal-body">
+        <p class="fortune-text" id="fortuneText"></p>
+        <button type="button" class="btn btn-primary" id="fortuneCloseBtn">Tamam</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mood-overlay" id="moodOverlay" hidden aria-hidden="true">
+    <div class="mood-modal" role="dialog" aria-labelledby="moodModalTitle" aria-modal="true">
+      <div class="mood-modal-header">
+        <h2 id="moodModalTitle">Bugün nasılsın?</h2>
+      </div>
+      <div class="mood-modal-body">
+        <p class="mood-subtitle">Ruh haline göre sana bir öneri sunalım.</p>
+        <div class="mood-options" id="moodOptions">
+          <button type="button" class="mood-option" data-mood="stressed">😤 Stresliyim</button>
+          <button type="button" class="mood-option" data-mood="happy">😊 Mutluyum</button>
+          <button type="button" class="mood-option" data-mood="sleepy">😴 Uykum var</button>
+          <button type="button" class="mood-option" data-mood="hungry">🍴 Açım</button>
+          <button type="button" class="mood-option" data-mood="neutral">😐 Normal</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <main class="main">
     <section class="hero">
+      <div class="hero-info" id="heroInfo">
+        <span class="hero-info-item"><span class="hero-info-label">Aktif</span> <span id="statActive">0</span></span>
+        <span class="hero-info-item"><span class="hero-info-label">Düşük</span> <span id="statLow">0</span></span>
+        <span class="hero-info-item"><span class="hero-info-label">Tükenen</span> <span id="statDepleted">0</span></span>
+        <span class="hero-info-item"><span class="hero-info-label">Rezerve</span> <span id="statReserved">0</span></span>
+      </div>
       <div class="hero-left">
         <div class="hero-icon-wrap">
           <span class="hero-icon" aria-hidden="true">🍪</span>
         </div>
         <h1 class="hero-title">Çekmece Stoğu</h1>
         <p class="hero-tagline">Ofisteki abur cubur envanteri ve güncel stok durumu.</p>
+        <div class="hero-mood-bar" id="footerMoodBar">
+          <span class="footer-mood-icon footer-mood-icon-prompt" id="footerMoodIconPrompt" aria-hidden="true">✨</span>
+          <span class="footer-mood-icon footer-mood-icon-tip" id="footerMoodIconTip" hidden aria-hidden="true">💡</span>
+          <span class="footer-mood-prompt" id="footerMoodPrompt">Ruh haline göre sana bir öneri sunalım.</span>
+          <span class="footer-mood-label" id="footerMoodLabel" hidden>Sana önerimiz:</span>
+          <span class="footer-mood-text" id="footerMoodText" hidden></span>
+          <button type="button" class="btn btn-mood-primary" id="moodSelectBtn">Mood seç</button>
+          <button type="button" class="btn btn-mood-change" id="moodChangeBtn" hidden>Moodu değiştir</button>
+        </div>
         <button type="button" class="btn btn-donate" id="donateBtn" aria-label="Donate noktalarını göster">🍪🍪 DONATE YAP 🍪🍪</button>
+        <button type="button" class="btn btn-leaderboard" id="leaderboardBtn" aria-label="Kim Ne Yedi?">🏆 Kim Ne Yedi?</button>
+        <button type="button" class="btn btn-lucky" id="luckyBtn" aria-label="Rastgele seç">🍀 Ne yesem?</button>
       </div>
     </section>
 
@@ -127,63 +282,6 @@
         </div>
       </div>
     </div>
-
-    <section class="stats-cards" id="statsCards">
-      <div class="stat-card stat-active">
-        <span class="stat-icon stat-icon-check">✓</span>
-        <div class="stat-content">
-          <span class="stat-label">AKTİF ÜRÜN</span>
-          <span class="stat-value" id="statActive">0</span>
-        </div>
-      </div>
-      <div class="stat-card stat-low">
-        <span class="stat-icon stat-icon-warning">!</span>
-        <div class="stat-content">
-          <span class="stat-label">DÜŞÜK STOK</span>
-          <span class="stat-value" id="statLow">0</span>
-        </div>
-      </div>
-      <div class="stat-card stat-depleted">
-        <span class="stat-icon stat-icon-info">i</span>
-        <div class="stat-content">
-          <span class="stat-label">TÜKENEN</span>
-          <span class="stat-value" id="statDepleted">0</span>
-        </div>
-      </div>
-      <div class="stat-card stat-filter" id="typeFilterCard">
-        <span class="stat-icon stat-icon-filter" aria-hidden="true">⎇</span>
-        <div class="stat-content">
-          <span class="stat-label">FİLTRE</span>
-          <fieldset class="type-filter">
-            <legend class="sr-only">Tür filtresi</legend>
-            <button type="button" class="type-filter-btn active" data-type="" aria-pressed="true">
-              <span class="type-filter-icon" aria-hidden="true">✨</span>
-            </button>
-            <button type="button" class="type-filter-btn" data-type="Tatlı" aria-pressed="false">
-              <span class="type-filter-icon" aria-hidden="true">🍩</span>
-            </button>
-            <button type="button" class="type-filter-btn" data-type="Tuzlu" aria-pressed="false">
-              <span class="type-filter-icon" aria-hidden="true">🥨</span>
-            </button>
-          </fieldset>
-        </div>
-      </div>
-      <div class="stat-card stat-sort" id="sortCard">
-        <span class="stat-icon stat-icon-sort" aria-hidden="true">⇅</span>
-        <div class="stat-content">
-          <span class="stat-label">SIRALAMA</span>
-          <fieldset class="sort-order">
-            <legend class="sr-only">Stok sıralaması</legend>
-            <button type="button" class="sort-order-btn active" data-order="desc" aria-pressed="true" title="Çoktan aza (azalan)">
-              <span class="sort-order-icon" aria-hidden="true">↓</span>
-            </button>
-            <button type="button" class="sort-order-btn" data-order="asc" aria-pressed="false" title="Azdan çoğa (artan)">
-              <span class="sort-order-icon" aria-hidden="true">↑</span>
-            </button>
-          </fieldset>
-        </div>
-      </div>
-    </section>
 
     <section class="add-product-section" id="addProductSection" hidden>
       <h2>Ürün ekle</h2>
@@ -223,7 +321,6 @@
   </main>
 
   <footer class="footer">
-    
   </footer>
 
   <script src="app.js"></script>

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "ab3f2de2d90751ba",
+    "productId": "04a9c5c2edb8710b",
+    "userId": "392a88c158f2cc27",
+    "quantity": 1,
+    "expiresAt": "2026-03-08T23:58:47.322Z",
+    "createdAt": "2026-03-08T22:58:47.322Z"
+  },
+  {
+    "id": "25dcee7d3c7f1ec7",
+    "productId": "63f5cf99e8aca5e2",
+    "userId": "392a88c158f2cc27",
+    "quantity": 1,
+    "expiresAt": "2026-03-08T23:58:52.159Z",
+    "createdAt": "2026-03-08T22:58:52.159Z"
+  }
+]
