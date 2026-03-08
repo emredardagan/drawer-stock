@@ -562,6 +562,53 @@ body {
   color: var(--gray-400);
 }
 
+.admin-login-error {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--red);
+  min-height: 1.25rem;
+}
+
+.admin-login-error[hidden] {
+  display: none;
+}
+
+.admin-password-wrap {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.admin-password-wrap .admin-password-input {
+  flex: 1;
+}
+
+/* Mask as bullets so extensions don't see a real password field */
+.admin-password-input {
+  -webkit-text-security: disc;
+}
+
+.admin-password-input.admin-password-visible {
+  -webkit-text-security: none;
+}
+
+.admin-password-toggle {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--gray-400);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-sm);
+  transition: color 0.2s, background 0.2s;
+}
+
+.admin-password-toggle:hover {
+  color: var(--white);
+  background: rgba(255, 255, 255, 0.08);
+}
+
 /* Reserve overlay */
 .reserve-overlay,
 .wishlist-overlay {

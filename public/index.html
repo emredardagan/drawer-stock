@@ -123,9 +123,27 @@
       </div>
       <form class="register-form" id="registerForm">
         <label for="registerNickname">Takma ad <span class="required">*</span></label>
-        <input type="text" id="registerNickname" name="nickname" placeholder="Örn. Çekmece Canavarı" required autocomplete="username">
+        <input type="text" id="registerNickname" name="nickname" placeholder="Örn. Çekmece Canavarı" required autocomplete="nickname" data-form-type="other">
         <label for="registerDepartment">Departman (isteğe bağlı)</label>
-        <input type="text" id="registerDepartment" name="department" placeholder="Örn. Yazılım" autocomplete="organization">
+        <input type="text" id="registerDepartment" name="department" placeholder="Örn. Yazılım" autocomplete="off" data-form-type="other">
+        <button type="submit" class="btn btn-primary">Giriş yap</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="register-overlay" id="adminLoginOverlay" hidden aria-hidden="true">
+    <div class="register-modal" role="dialog" aria-labelledby="adminLoginModalTitle" aria-modal="true">
+      <div class="register-modal-header">
+        <h2 id="adminLoginModalTitle">Admin Girişi</h2>
+        <button type="button" class="register-close" id="adminLoginClose" aria-label="Kapat">&times;</button>
+      </div>
+      <form class="register-form" id="adminLoginForm">
+        <label for="adminPassword">Şifre</label>
+        <div class="admin-password-wrap">
+          <input type="text" id="adminPassword" name="admin_pin" placeholder="Admin şifresi" autocomplete="off" data-form-type="other" class="admin-password-input" aria-label="Admin şifresi">
+          <button type="button" class="admin-password-toggle" id="adminPasswordToggle" aria-label="Şifreyi göster">Göster</button>
+        </div>
+        <p class="admin-login-error" id="adminLoginError" role="alert" hidden></p>
         <button type="submit" class="btn btn-primary">Giriş yap</button>
       </form>
     </div>

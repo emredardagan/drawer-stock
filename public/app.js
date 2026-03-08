@@ -35,6 +35,12 @@ const userLogoutBtn = document.getElementById('userLogoutBtn');
 const registerOverlay = document.getElementById('registerOverlay');
 const registerClose = document.getElementById('registerClose');
 const registerForm = document.getElementById('registerForm');
+const adminLoginOverlay = document.getElementById('adminLoginOverlay');
+const adminLoginClose = document.getElementById('adminLoginClose');
+const adminLoginForm = document.getElementById('adminLoginForm');
+const adminPasswordInput = document.getElementById('adminPassword');
+const adminPasswordToggle = document.getElementById('adminPasswordToggle');
+const adminLoginError = document.getElementById('adminLoginError');
 const reserveOverlay = document.getElementById('reserveOverlay');
 const reserveClose = document.getElementById('reserveClose');
 const reserveForm = document.getElementById('reserveForm');
@@ -842,15 +848,67 @@ async function loadProducts() {
   }
 }
 
+function openAdminLoginOverlay() {
+  if (!adminLoginOverlay) return;
+  if (adminPasswordInput) {
+    adminPasswordInput.value = '';
+    adminPasswordInput.classList.remove('admin-password-visible');
+    adminPasswordInput.focus();
+  }
+  if (adminPasswordToggle) {
+    adminPasswordToggle.textContent = 'Göster';
+    adminPasswordToggle.setAttribute('aria-label', 'Şifreyi göster');
+  }
+  if (adminLoginError) {
+    adminLoginError.textContent = '';
+    adminLoginError.setAttribute('hidden', '');
+  }
+  adminLoginOverlay.removeAttribute('hidden');
+  adminLoginOverlay.setAttribute('aria-hidden', 'false');
+}
+
+function closeAdminLoginOverlay() {
+  if (!adminLoginOverlay) return;
+  adminLoginOverlay.setAttribute('hidden', '');
+  adminLoginOverlay.setAttribute('aria-hidden', 'true');
+}
+
 if (loginBtn) {
-  loginBtn.addEventListener('click', async () => {
-    const password = prompt('Admin şifresi:');
+  loginBtn.addEventListener('click', () => openAdminLoginOverlay());
+}
+
+if (adminLoginOverlay) {
+  adminLoginOverlay.addEventListener('click', (e) => {
+    if (e.target === adminLoginOverlay) closeAdminLoginOverlay();
+  });
+}
+
+if (adminLoginClose) {
+  adminLoginClose.addEventListener('click', () => closeAdminLoginOverlay());
+}
+
+if (adminPasswordToggle && adminPasswordInput) {
+  adminPasswordToggle.addEventListener('click', () => {
+    const visible = adminPasswordInput.classList.toggle('admin-password-visible');
+    adminPasswordToggle.textContent = visible ? 'Gizle' : 'Göster';
+    adminPasswordToggle.setAttribute('aria-label', visible ? 'Şifreyi gizle' : 'Şifreyi göster');
+  });
+}
+
+if (adminLoginForm && adminPasswordInput && adminLoginError) {
+  adminLoginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const password = adminPasswordInput.value;
     if (!password) return;
+    adminLoginError.textContent = '';
+    adminLoginError.setAttribute('hidden', '');
     try {
       await login(password);
+      closeAdminLoginOverlay();
       loadProducts();
     } catch (e) {
-      alert(e.message);
+      adminLoginError.textContent = e.message || 'Giriş başarısız.';
+      adminLoginError.removeAttribute('hidden');
     }
   });
 }
