@@ -14,5 +14,93 @@
     "quantity": 1,
     "expiresAt": "2026-03-08T23:58:52.159Z",
     "createdAt": "2026-03-08T22:58:52.159Z"
+  },
+  {
+    "id": "3d3c97238bf74cd3",
+    "productId": "3143d8f118c40a7c",
+    "userId": "30afa3b20f081e92",
+    "quantity": 1,
+    "expiresAt": "2026-03-09T06:12:18.744Z",
+    "createdAt": "2026-03-09T05:12:18.744Z"
+  },
+  {
+    "id": "d510a95a948244d7",
+    "productId": "63f5cf99e8aca5e2",
+    "userId": "30afa3b20f081e92",
+    "quantity": 6,
+    "expiresAt": "2026-03-09T07:27:18.358Z",
+    "createdAt": "2026-03-09T06:27:18.358Z"
+  },
+  {
+    "id": "27fcc9ebc12e5219",
+    "productId": "a7c730f9d2f0d079",
+    "userId": "30afa3b20f081e92",
+    "quantity": 5,
+    "expiresAt": "2026-03-09T07:27:34.251Z",
+    "createdAt": "2026-03-09T06:27:34.250Z"
+  },
+  {
+    "id": "e23bdc4062210c39",
+    "productId": "04a9c5c2edb8710b",
+    "userId": "30afa3b20f081e92",
+    "quantity": 3,
+    "expiresAt": "2026-03-09T07:27:41.379Z",
+    "createdAt": "2026-03-09T06:27:41.379Z"
+  },
+  {
+    "id": "db77732bb53f723e",
+    "productId": "3143d8f118c40a7c",
+    "userId": "30afa3b20f081e92",
+    "quantity": 2,
+    "expiresAt": "2026-03-09T07:27:47.400Z",
+    "createdAt": "2026-03-09T06:27:47.400Z"
+  },
+  {
+    "id": "400720d077432ff6",
+    "productId": "e922ce56b76ed4a0",
+    "userId": "30afa3b20f081e92",
+    "quantity": 2,
+    "expiresAt": "2026-03-09T07:27:55.040Z",
+    "createdAt": "2026-03-09T06:27:55.040Z"
+  },
+  {
+    "id": "a59537d30625a62b",
+    "productId": "7ad94ff5955b8179",
+    "userId": "30afa3b20f081e92",
+    "quantity": 1,
+    "expiresAt": "2026-03-09T07:28:00.453Z",
+    "createdAt": "2026-03-09T06:28:00.453Z"
+  },
+  {
+    "id": "331c00ee74f337d8",
+    "productId": "0697c5c89c7dd318",
+    "userId": "30afa3b20f081e92",
+    "quantity": 1,
+    "expiresAt": "2026-03-09T07:28:02.924Z",
+    "createdAt": "2026-03-09T06:28:02.924Z"
+  },
+  {
+    "id": "c09cd26cca10aeed",
+    "productId": "469c5eb4bf3c70fc",
+    "userId": "30afa3b20f081e92",
+    "quantity": 1,
+    "expiresAt": "2026-03-09T07:28:05.381Z",
+    "createdAt": "2026-03-09T06:28:05.381Z"
+  },
+  {
+    "id": "18e997ccc32e468d",
+    "productId": "beead2ca14af4ba2",
+    "userId": "30afa3b20f081e92",
+    "quantity": 1,
+    "expiresAt": "2026-03-09T07:28:09.614Z",
+    "createdAt": "2026-03-09T06:28:09.614Z"
+  },
+  {
+    "id": "73a0b37546789421",
+    "productId": "6489515c3e985021",
+    "userId": "30afa3b20f081e92",
+    "quantity": 1,
+    "expiresAt": "2026-03-09T07:28:11.730Z",
+    "createdAt": "2026-03-09T06:28:11.730Z"
   }
 ]

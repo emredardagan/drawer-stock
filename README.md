@@ -1,4 +1,4 @@
-# Çekmece Stoku
+# Çekmece Stoğu
 
 Ofisteki çekmece stoğunu takip eden mini web uygulaması. Admin şifre ile giriş yapıp ürün ekleyebilir; herkes stoğu görüntüleyebilir.
 
