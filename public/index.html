@@ -110,7 +110,7 @@
           <span class="user-nickname" id="userNickname"></span>
           <button type="button" class="btn btn-outline btn-sm" id="userLogoutBtn">Çıkış</button>
         </div>
-        <div class="user-avatar" aria-hidden="true"></div>
+        <!-- <div class="user-avatar" aria-hidden="true"></div> -->
       </div>
     </div>
   </header>
@@ -173,6 +173,27 @@
       <div class="wishlist-modal-body" id="wishlistBody">
         <p class="wishlist-empty" id="wishlistEmpty">Rezervasyonunuz yok.</p>
         <ul class="wishlist-list" id="wishlistList"></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="wishlist-items-overlay" id="wishlistItemsOverlay" hidden aria-hidden="true">
+    <div class="wishlist-items-modal" role="dialog" aria-labelledby="wishlistItemsModalTitle" aria-modal="true">
+      <div class="wishlist-items-modal-header">
+        <h2 id="wishlistItemsModalTitle">📝 İstek Listesi</h2>
+        <button type="button" class="wishlist-items-close" id="wishlistItemsClose" aria-label="Kapat">&times;</button>
+      </div>
+      <div class="wishlist-items-modal-body">
+        <p class="wishlist-items-login-prompt" id="wishlistItemsLoginPrompt">Oy vermek ve yeni öneri eklemek için önce giriş yapın (rumuz verin).</p>
+        <form class="wishlist-items-add-form" id="wishlistItemsAddForm" hidden>
+          <label for="wishlistItemName">Yeni öneri ekle</label>
+          <div class="wishlist-items-add-row">
+            <input type="text" id="wishlistItemName" name="name" placeholder="Örn. Oreo" required>
+            <button type="submit" class="btn btn-primary">Ekle</button>
+          </div>
+        </form>
+        <ul class="wishlist-items-list" id="wishlistItemsList"></ul>
+        <p class="wishlist-items-empty" id="wishlistItemsEmpty">Henüz öneri yok. Giriş yapıp ilk öneriyi sen ekle!</p>
       </div>
     </div>
   </div>
@@ -266,6 +287,7 @@
           <button type="button" class="btn btn-mood-change" id="moodChangeBtn" hidden>Moodu değiştir</button>
         </div>
         <button type="button" class="btn btn-donate" id="donateBtn" aria-label="Donate noktalarını göster">🍪🍪 DONATE YAP 🍪🍪</button>
+        <button type="button" class="btn btn-wishlist-items" id="wishlistItemsBtn" aria-label="İstek listesi">📝 İstek Listesi</button>
         <button type="button" class="btn btn-leaderboard" id="leaderboardBtn" aria-label="Kim Ne Yedi?">🏆 Kim Ne Yedi?</button>
         <button type="button" class="btn btn-lucky" id="luckyBtn" aria-label="Rastgele seç">🍀 Ne yesem?</button>
       </div>

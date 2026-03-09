@@ -11,7 +11,8 @@ const DATA_PATH = path.join(__dirname, 'data', 'products.json');
 const USERS_PATH = path.join(__dirname, 'data', 'users.json');
 const RESERVATIONS_PATH = path.join(__dirname, 'data', 'reservations.json');
 const CONSUMPTIONS_PATH = path.join(__dirname, 'data', 'consumptions.json');
-const RESERVATION_DURATION_MS = 60 * 60 * 1000;
+const WISHLIST_PATH = path.join(__dirname, 'data', 'wishlist.json');
+const RESERVATION_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 
 const FORTUNES = [
   'Bu bisküviyi yiyen kişinin bugün toplantısı erken biter.',
@@ -73,6 +74,20 @@ function writeReservations(reservations) {
   fs.writeFileSync(RESERVATIONS_PATH, JSON.stringify(reservations, null, 2), 'utf8');
 }
 
+function cleanupExpiredReservations() {
+  try {
+    const reservations = readReservations();
+    const now = new Date().toISOString();
+    const active = reservations.filter((r) => r.expiresAt > now);
+    if (active.length !== reservations.length) {
+      writeReservations(active);
+      console.log('[Reservations] Removed', reservations.length - active.length, 'expired reservation(s).');
+    }
+  } catch (err) {
+    console.error('[Reservations] Cleanup failed:', err.message);
+  }
+}
+
 function getActiveReservations(reservations, productId) {
   const now = new Date().toISOString();
   return reservations.filter(
@@ -96,6 +111,23 @@ function readConsumptions() {
 
 function writeConsumptions(consumptions) {
   fs.writeFileSync(CONSUMPTIONS_PATH, JSON.stringify(consumptions, null, 2), 'utf8');
+}
+
+function readWishlist() {
+  try {
+    const raw = fs.readFileSync(WISHLIST_PATH, 'utf8');
+    const data = JSON.parse(raw);
+    return Array.isArray(data.items) ? data : { items: [] };
+  } catch (err) {
+    if (err.code === 'ENOENT') return { items: [] };
+    throw err;
+  }
+}
+
+function writeWishlist(data) {
+  const obj = typeof data === 'object' && data !== null ? data : { items: [] };
+  if (!Array.isArray(obj.items)) obj.items = [];
+  fs.writeFileSync(WISHLIST_PATH, JSON.stringify(obj, null, 2), 'utf8');
 }
 
 function loadUserTokens() {
@@ -511,7 +543,97 @@ app.delete('/api/products/:id', requireAdmin, (req, res) => {
   }
 });
 
+// Wishlist (istek listesi) - add items, vote (requires user/rumuz)
+app.get('/api/wishlist-items', (req, res) => {
+  try {
+    const userId = getUserFromToken(req.headers.authorization);
+    const { items } = readWishlist();
+    const users = readUsers();
+    const withNicknames = items.map((item) => {
+      const addedByUser = users.find((u) => u.id === item.addedBy);
+      const votes = Array.isArray(item.votes) ? item.votes : [];
+      return {
+        ...item,
+        addedByNickname: addedByUser ? addedByUser.nickname : null,
+        voteCount: votes.length,
+        hasVoted: userId ? votes.includes(userId) : false,
+      };
+    });
+    const sorted = withNicknames.sort((a, b) => (b.voteCount || 0) - (a.voteCount || 0));
+    res.json({ items: sorted });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to read wishlist' });
+  }
+});
+
+app.post('/api/wishlist-items', requireUser, (req, res) => {
+  const { name } = req.body || {};
+  const trimmed = typeof name === 'string' ? name.trim() : '';
+  if (!trimmed) {
+    return res.status(400).json({ error: 'name required', message: 'Ürün adı gerekli.' });
+  }
+  try {
+    const data = readWishlist();
+    const id = crypto.randomBytes(8).toString('hex');
+    const now = new Date().toISOString();
+    const item = {
+      id,
+      name: trimmed,
+      addedBy: req.userId,
+      addedAt: now,
+      votes: [],
+    };
+    data.items.push(item);
+    writeWishlist(data);
+    res.status(201).json(item);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to add wishlist item' });
+  }
+});
+
+app.post('/api/wishlist-items/:id/vote', requireUser, (req, res) => {
+  const { id } = req.params;
+  try {
+    const data = readWishlist();
+    const item = data.items.find((i) => i.id === id);
+    if (!item) return res.status(404).json({ error: 'Wishlist item not found' });
+    const votes = Array.isArray(item.votes) ? item.votes : [];
+    const idx = votes.indexOf(req.userId);
+    if (idx >= 0) {
+      votes.splice(idx, 1);
+    } else {
+      votes.push(req.userId);
+    }
+    item.votes = votes;
+    writeWishlist(data);
+    res.json({ voted: idx < 0, voteCount: votes.length });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to vote' });
+  }
+});
+
+// Admin: mark wishlist item as received (remove from list)
+app.delete('/api/wishlist-items/:id', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  try {
+    const data = readWishlist();
+    const before = data.items.length;
+    data.items = data.items.filter((i) => i.id !== id);
+    if (data.items.length === before) {
+      return res.status(404).json({ error: 'Wishlist item not found' });
+    }
+    writeWishlist(data);
+    res.json({ removed: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to remove wishlist item' });
+  }
+});
+
 app.use(express.static('public'));
+
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+setInterval(cleanupExpiredReservations, CLEANUP_INTERVAL_MS);
+cleanupExpiredReservations(); // run once on startup
 
 app.listen(PORT, HOST, () => {
   console.log(`Drawer Stock running at http://localhost:${PORT}`);

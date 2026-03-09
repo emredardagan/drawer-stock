@@ -81,6 +81,14 @@ const footerMoodIconPrompt = document.getElementById('footerMoodIconPrompt');
 const footerMoodIconTip = document.getElementById('footerMoodIconTip');
 const moodSelectBtn = document.getElementById('moodSelectBtn');
 const moodChangeBtn = document.getElementById('moodChangeBtn');
+const wishlistItemsBtn = document.getElementById('wishlistItemsBtn');
+const wishlistItemsOverlay = document.getElementById('wishlistItemsOverlay');
+const wishlistItemsClose = document.getElementById('wishlistItemsClose');
+const wishlistItemsLoginPrompt = document.getElementById('wishlistItemsLoginPrompt');
+const wishlistItemsAddForm = document.getElementById('wishlistItemsAddForm');
+const wishlistItemName = document.getElementById('wishlistItemName');
+const wishlistItemsList = document.getElementById('wishlistItemsList');
+const wishlistItemsEmpty = document.getElementById('wishlistItemsEmpty');
 let allProducts = [];
 let leaderboardBy = 'user';
 let reserveProduct = null;
@@ -259,6 +267,117 @@ function closeWishlistModal() {
   }
 }
 
+async function loadWishlistItems() {
+  if (!wishlistItemsList) return;
+  const token = getUserToken();
+  const adminToken = getToken();
+  if (wishlistItemsLoginPrompt) wishlistItemsLoginPrompt.hidden = !!token;
+  if (wishlistItemsAddForm) wishlistItemsAddForm.hidden = !token;
+  try {
+    const headers = {};
+    if (token) headers.Authorization = 'Bearer ' + token;
+    const res = await fetch('/api/wishlist-items', { headers });
+    const data = await parseJsonResponse(res);
+    const items = (data && data.items) ? data.items : [];
+    wishlistItemsList.innerHTML = '';
+    if (wishlistItemsEmpty) {
+      wishlistItemsEmpty.hidden = items.length > 0;
+      wishlistItemsEmpty.textContent = 'Henüz öneri yok. Giriş yapıp ilk öneriyi sen ekle!';
+    }
+    items.forEach((item) => {
+      const li = document.createElement('li');
+      li.className = 'wishlist-items-item';
+      const content = document.createElement('div');
+      content.className = 'wishlist-items-item-content';
+      const name = document.createElement('div');
+      name.className = 'wishlist-items-item-name';
+      name.textContent = item.name || '—';
+      const meta = document.createElement('div');
+      meta.className = 'wishlist-items-item-meta';
+      if (item.addedByNickname) {
+        const by = document.createElement('span');
+        by.className = 'wishlist-items-item-by';
+        by.textContent = item.addedByNickname + ' önerdi';
+        meta.appendChild(by);
+      }
+      if (item.voteCount != null) {
+        const votes = document.createElement('span');
+        votes.className = 'wishlist-items-item-votes';
+        votes.textContent = item.voteCount + ' oy';
+        meta.appendChild(votes);
+      }
+      content.appendChild(name);
+      content.appendChild(meta);
+      const actionBtn = document.createElement('button');
+      actionBtn.type = 'button';
+      if (adminToken) {
+        actionBtn.className = 'wishlist-items-vote-btn wishlist-items-received-btn';
+        actionBtn.setAttribute('aria-label', 'Alındı olarak işaretle ve listeden kaldır');
+        actionBtn.innerHTML = '<span class="wishlist-items-vote-icon">✓</span><span class="wishlist-items-vote-label">Alındı</span>';
+        actionBtn.addEventListener('click', async () => {
+          try {
+            const r = await fetch('/api/wishlist-items/' + item.id, {
+              method: 'DELETE',
+              headers: { Authorization: 'Bearer ' + adminToken },
+            });
+            await parseJsonResponse(r);
+            if (r.ok) loadWishlistItems();
+            else alert('Kaldırılamadı.');
+          } catch (e) {
+            alert(e.message || 'Kaldırılamadı.');
+          }
+        });
+      } else {
+        actionBtn.className = 'wishlist-items-vote-btn' + (item.hasVoted ? ' voted' : '');
+        actionBtn.setAttribute('aria-label', item.hasVoted ? 'Oyu kaldır' : 'Oy ver');
+        actionBtn.innerHTML = item.hasVoted
+          ? '<span class="wishlist-items-vote-icon">✓</span><span class="wishlist-items-vote-label">Oyladım</span>'
+          : '<span class="wishlist-items-vote-icon">↑</span><span class="wishlist-items-vote-label">Oy ver</span>';
+        actionBtn.addEventListener('click', async () => {
+          if (!token) {
+            closeWishlistItemsModal();
+            openRegisterModal();
+            return;
+          }
+          try {
+            const r = await fetch('/api/wishlist-items/' + item.id + '/vote', {
+              method: 'POST',
+              headers: { Authorization: 'Bearer ' + token },
+            });
+            await parseJsonResponse(r);
+            if (r.ok) loadWishlistItems();
+          } catch (e) {
+            alert(e.message || 'Oy verilemedi.');
+          }
+        });
+      }
+      li.appendChild(content);
+      li.appendChild(actionBtn);
+      wishlistItemsList.appendChild(li);
+    });
+  } catch (err) {
+    if (wishlistItemsEmpty) {
+      wishlistItemsEmpty.hidden = false;
+      wishlistItemsEmpty.textContent = 'Yüklenemedi.';
+    }
+  }
+}
+
+function openWishlistItemsModal() {
+  if (wishlistItemsOverlay) {
+    wishlistItemsOverlay.removeAttribute('hidden');
+    wishlistItemsOverlay.setAttribute('aria-hidden', 'false');
+  }
+  loadWishlistItems();
+}
+
+function closeWishlistItemsModal() {
+  if (wishlistItemsOverlay) {
+    wishlistItemsOverlay.setAttribute('hidden', '');
+    wishlistItemsOverlay.setAttribute('aria-hidden', 'true');
+  }
+}
+
 function showFortune(text) {
   if (fortuneText) fortuneText.textContent = text || '';
   if (fortuneOverlay) {
@@ -360,6 +479,7 @@ function applyMoodUI(mood) {
   const text = MOOD_TEXTS[mood] || '';
   if (!footerMoodBar) return;
   if (text) {
+    footerMoodBar.classList.add('mood-bar-has-suggestion');
     if (footerMoodIconPrompt) footerMoodIconPrompt.setAttribute('hidden', '');
     if (footerMoodIconTip) footerMoodIconTip.removeAttribute('hidden');
     if (footerMoodPrompt) footerMoodPrompt.setAttribute('hidden', '');
@@ -371,6 +491,7 @@ function applyMoodUI(mood) {
     if (moodSelectBtn) moodSelectBtn.setAttribute('hidden', '');
     if (moodChangeBtn) moodChangeBtn.removeAttribute('hidden');
   } else {
+    footerMoodBar.classList.remove('mood-bar-has-suggestion');
     if (footerMoodIconPrompt) footerMoodIconPrompt.removeAttribute('hidden');
     if (footerMoodIconTip) footerMoodIconTip.setAttribute('hidden', '');
     if (footerMoodPrompt) footerMoodPrompt.removeAttribute('hidden');
@@ -716,18 +837,21 @@ function renderProduct(product, isAdmin) {
 
   const hasUser = !!getUserToken();
   if (hasUser && available >= 1) {
+    const actionsWrap = document.createElement('div');
+    actionsWrap.className = 'product-card-actions';
     const reserveBtn = document.createElement('button');
     reserveBtn.type = 'button';
     reserveBtn.className = 'btn btn-reserve';
     reserveBtn.textContent = 'Rezerve et';
     reserveBtn.addEventListener('click', () => openReserveModal(product));
-    body.appendChild(reserveBtn);
+    actionsWrap.appendChild(reserveBtn);
     const takeBtn = document.createElement('button');
     takeBtn.type = 'button';
     takeBtn.className = 'btn btn-take';
     takeBtn.textContent = 'Aldım';
     takeBtn.addEventListener('click', () => takeProduct(product.id));
-    body.appendChild(takeBtn);
+    actionsWrap.appendChild(takeBtn);
+    body.appendChild(actionsWrap);
   }
 
   if (status === 'sold-out') {
@@ -1022,6 +1146,16 @@ updateAdminUI();
 updateUserUI();
 loadProducts();
 
+setInterval(() => {
+  loadProducts();
+  if (wishlistOverlay && wishlistOverlay.getAttribute('aria-hidden') === 'false') {
+    loadWishlist();
+  }
+  if (wishlistItemsOverlay && wishlistItemsOverlay.getAttribute('aria-hidden') === 'false') {
+    loadWishlistItems();
+  }
+}, 2 * 60 * 1000);
+
 const storedMood = getStoredMood();
 if (storedMood && MOOD_TEXTS[storedMood]) {
   applyMoodUI(storedMood);
@@ -1131,6 +1265,50 @@ if (wishlistClose) wishlistClose.addEventListener('click', closeWishlistModal);
 if (wishlistOverlay) {
   wishlistOverlay.addEventListener('click', (e) => {
     if (e.target === wishlistOverlay) closeWishlistModal();
+  });
+}
+
+if (wishlistItemsBtn) wishlistItemsBtn.addEventListener('click', openWishlistItemsModal);
+if (wishlistItemsClose) wishlistItemsClose.addEventListener('click', closeWishlistItemsModal);
+if (wishlistItemsOverlay) {
+  wishlistItemsOverlay.addEventListener('click', (e) => {
+    if (e.target === wishlistItemsOverlay) closeWishlistItemsModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && wishlistItemsOverlay.getAttribute('aria-hidden') === 'false') {
+      closeWishlistItemsModal();
+    }
+  });
+}
+if (wishlistItemsAddForm) {
+  wishlistItemsAddForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const token = getUserToken();
+    if (!token) {
+      openRegisterModal();
+      return;
+    }
+    const name = wishlistItemName ? wishlistItemName.value.trim() : '';
+    if (!name) return;
+    try {
+      const res = await fetch('/api/wishlist-items', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + token,
+        },
+        body: JSON.stringify({ name }),
+      });
+      const data = await parseJsonResponse(res);
+      if (res.ok) {
+        if (wishlistItemName) wishlistItemName.value = '';
+        loadWishlistItems();
+      } else {
+        alert(data.message || data.error || 'Eklenemedi.');
+      }
+    } catch (err) {
+      alert(err.message || 'Eklenemedi.');
+    }
   });
 }
 
