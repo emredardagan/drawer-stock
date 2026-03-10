@@ -43,6 +43,7 @@ const ALERT_FUN_MESSAGES = [
 ];
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
+const GAME_RESULT_CODE = process.env.GAME_RESULT_CODE || 'mermermerve';
 if (!process.env.ADMIN_PASSWORD) {
   console.warn('Uyarı: ADMIN_PASSWORD tanımlı değil, varsayılan "admin" kullanılıyor. Gerçek kullanım için .env dosyasında ADMIN_PASSWORD ayarlayın.');
 }
@@ -126,6 +127,25 @@ function readConsumptions() {
 
 function writeConsumptions(consumptions) {
   fs.writeFileSync(CONSUMPTIONS_PATH, JSON.stringify(consumptions, null, 2), 'utf8');
+}
+
+function buildGuessGamePlayers() {
+  const consumptions = readConsumptions();
+  const map = new Map();
+
+  consumptions.forEach((entry) => {
+    const label = String(entry.nickname || 'Anonim').trim() || 'Anonim';
+    const guestSlug = label.toLocaleLowerCase('tr') + ':' + String(entry.department || '').trim().toLocaleLowerCase('tr');
+    const id = entry.userId || `guest:${guestSlug}`;
+
+    if (!map.has(id)) {
+      map.set(id, { id, label, count: 0 });
+    }
+
+    map.get(id).count += 1;
+  });
+
+  return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label, 'tr', { sensitivity: 'base' }));
 }
 
 function readWishlist() {
@@ -499,6 +519,47 @@ app.post('/api/alert/emergency', requireUser, (req, res) => {
       });
   } catch (err) {
     res.status(500).json({ error: 'Failed to send alert', message: err.message });
+  }
+});
+
+app.get('/api/guess-game/players', (req, res) => {
+  try {
+    const list = buildGuessGamePlayers().map((entry) => ({
+      id: entry.id,
+      label: entry.label,
+    }));
+    res.json({ list });
+  } catch (err) {
+    res.status(500).json({ error: 'Tahmin oyunu listesi okunamadi.' });
+  }
+});
+
+app.post('/api/guess-game/results', (req, res) => {
+  const code = typeof req.body?.code === 'string' ? req.body.code.trim().toLocaleLowerCase('tr') : '';
+  const guesses = Array.isArray(req.body?.guesses) ? req.body.guesses : [];
+
+  if (code !== GAME_RESULT_CODE.toLocaleLowerCase('tr')) {
+    return res.status(403).json({ error: 'Kod tutmadi. Cekmece sirlarini kolay acmiyor.' });
+  }
+
+  try {
+    const players = buildGuessGamePlayers();
+    const guessMap = new Map();
+
+    guesses.forEach((entry) => {
+      const id = typeof entry?.id === 'string' ? entry.id : '';
+      const guess = Math.floor(Number(entry?.guess));
+      if (!id || Number.isNaN(guess) || guess < 0) return;
+      guessMap.set(id, guess);
+    });
+
+    const matchedIds = players
+      .filter((entry) => guessMap.has(entry.id) && guessMap.get(entry.id) === entry.count)
+      .map((entry) => entry.id);
+
+    res.json({ matchedIds, matchedCount: matchedIds.length });
+  } catch (err) {
+    res.status(500).json({ error: 'Tahminler kontrol edilirken cekmece homurdandi.' });
   }
 });
 
