@@ -1,6 +1,7 @@
 const TOKEN_KEY = 'drawer_stock_admin_token';
 const USER_TOKEN_KEY = 'drawer_stock_user_token';
 const MOOD_KEY = 'drawer_stock_mood';
+const GUESS_GAME_GUESSES_KEY = 'drawer_stock_guess_game_guesses';
 const ALERT_COOLDOWN_COOKIE = 'drawer_alert_cooldown_until';
 const ALERT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 let alertCooldownTimerId = null;
@@ -89,8 +90,12 @@ const fortuneCloseBtn = document.getElementById('fortuneCloseBtn');
 const leaderboardBtn = document.getElementById('leaderboardBtn');
 const leaderboardOverlay = document.getElementById('leaderboardOverlay');
 const leaderboardClose = document.getElementById('leaderboardClose');
-const leaderboardTabUser = document.getElementById('leaderboardTabUser');
-const leaderboardTabDept = document.getElementById('leaderboardTabDept');
+const leaderboardIntro = document.getElementById('leaderboardIntro');
+const leaderboardRevealBtn = document.getElementById('leaderboardRevealBtn');
+const leaderboardCodeForm = document.getElementById('leaderboardCodeForm');
+const leaderboardCodeInput = document.getElementById('leaderboardCodeInput');
+const leaderboardCodeToggle = document.getElementById('leaderboardCodeToggle');
+const leaderboardResultSummary = document.getElementById('leaderboardResultSummary');
 const leaderboardList = document.getElementById('leaderboardList');
 const leaderboardEmpty = document.getElementById('leaderboardEmpty');
 const emergencyBtn = document.getElementById('emergencyBtn');
@@ -121,7 +126,8 @@ const wishlistItemName = document.getElementById('wishlistItemName');
 const wishlistItemsList = document.getElementById('wishlistItemsList');
 const wishlistItemsEmpty = document.getElementById('wishlistItemsEmpty');
 let allProducts = [];
-let leaderboardBy = 'user';
+let guessGamePlayers = [];
+let guessGameMatchedIds = new Set();
 let reserveProduct = null;
 let selectedTypeFilter = '';
 let sortOrder = 'desc';
@@ -450,46 +456,185 @@ function closeFortuneModal() {
   }
 }
 
-async function loadLeaderboard(by) {
-  leaderboardBy = by || leaderboardBy;
+function getStoredGuessGameGuesses() {
+  try {
+    const raw = localStorage.getItem(GUESS_GAME_GUESSES_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+function setStoredGuessGameGuesses(guesses) {
+  try {
+    const next = guesses && typeof guesses === 'object' ? guesses : {};
+    if (Object.keys(next).length === 0) {
+      localStorage.removeItem(GUESS_GAME_GUESSES_KEY);
+      return;
+    }
+    localStorage.setItem(GUESS_GAME_GUESSES_KEY, JSON.stringify(next));
+  } catch (err) {}
+}
+
+function updateGuessGameGuess(playerId, value) {
+  const guesses = getStoredGuessGameGuesses();
+  if (value === '' || value == null) delete guesses[playerId];
+  else guesses[playerId] = Math.max(0, Math.floor(Number(value) || 0));
+  setStoredGuessGameGuesses(guesses);
+}
+
+function setGuessGameSummary(message, variant = '') {
+  if (!leaderboardResultSummary) return;
+  leaderboardResultSummary.classList.remove('is-success', 'is-error', 'is-info');
+  if (!message) {
+    leaderboardResultSummary.textContent = '';
+    leaderboardResultSummary.setAttribute('hidden', '');
+    return;
+  }
+  leaderboardResultSummary.textContent = message;
+  if (variant) leaderboardResultSummary.classList.add('is-' + variant);
+  leaderboardResultSummary.removeAttribute('hidden');
+}
+
+function clearGuessGameResults() {
+  guessGameMatchedIds = new Set();
+  if (!leaderboardList) return;
+  leaderboardList.querySelectorAll('.leaderboard-item').forEach((item) => item.classList.remove('is-correct'));
+  leaderboardList.querySelectorAll('.guess-game-success').forEach((badge) => badge.setAttribute('hidden', ''));
+}
+
+function resetGuessGameCodeField() {
+  if (leaderboardCodeInput) leaderboardCodeInput.type = 'password';
+  if (leaderboardCodeToggle) {
+    leaderboardCodeToggle.textContent = 'Göster';
+    leaderboardCodeToggle.setAttribute('aria-label', 'Kodu göster');
+  }
+}
+
+function applyGuessGameResults(matchedIds) {
+  clearGuessGameResults();
+  guessGameMatchedIds = new Set((matchedIds || []).map((id) => String(id)));
+  if (!leaderboardList) return;
+  leaderboardList.querySelectorAll('.leaderboard-item').forEach((item) => {
+    const playerId = item.getAttribute('data-player-id') || '';
+    const badge = item.querySelector('.guess-game-success');
+    const isMatched = guessGameMatchedIds.has(playerId);
+    item.classList.toggle('is-correct', isMatched);
+    if (badge) {
+      if (isMatched) badge.removeAttribute('hidden');
+      else badge.setAttribute('hidden', '');
+    }
+  });
+}
+
+function renderGuessGamePlayers() {
+  if (!leaderboardList) return;
+
+  const guesses = getStoredGuessGameGuesses();
+  leaderboardList.innerHTML = '';
+
+  if (leaderboardIntro) {
+    const playerCount = guessGamePlayers.length;
+    leaderboardIntro.innerHTML = playerCount > 0
+      ? '<p class="guess-game-kicker">Cipsler yenmiş, izler silinmiş, sıra dedektiflikte.</p><p class="guess-game-copy">Şu an listede ' + playerCount + ' çekmece suçlusu var. Her biri için toplam kaç ürün kaptığını tahmin et. Nokta atışı yapanlar yeşil tiki kapar ve istediği bir ürünü alma hakkını cebe indirir.</p>'
+      : '<p class="guess-game-kicker">Şu an ortada şüpheli yok.</p><p class="guess-game-copy">Liste boş ama çekmece uzun süre masum kalmaz. İlk atıştırmalık operasyonunu bekliyoruz.</p>';
+  }
+
+  if (leaderboardEmpty) leaderboardEmpty.hidden = guessGamePlayers.length > 0;
+  if (leaderboardRevealBtn) leaderboardRevealBtn.disabled = guessGamePlayers.length === 0;
+
+  guessGamePlayers.forEach((entry) => {
+    const li = document.createElement('li');
+    li.className = 'leaderboard-item';
+    li.setAttribute('data-player-id', entry.id);
+
+    const head = document.createElement('div');
+    head.className = 'guess-game-row-head';
+
+    const rank = document.createElement('span');
+    rank.className = 'leaderboard-rank';
+    rank.textContent = '🎯';
+
+    const meta = document.createElement('div');
+    meta.className = 'guess-game-meta';
+
+    const label = document.createElement('span');
+    label.className = 'leaderboard-label';
+    label.textContent = entry.label || 'Anonim atıştırmacı';
+
+    const subtitle = document.createElement('span');
+    subtitle.className = 'guess-game-subtitle';
+    subtitle.textContent = 'Toplam kaç ürün kaptığını tahmin et.';
+
+    meta.appendChild(label);
+    meta.appendChild(subtitle);
+
+    const success = document.createElement('span');
+    success.className = 'guess-game-success';
+    success.textContent = '✓ Bingo! Hediye ürün hakkını kaptın.';
+    success.setAttribute('hidden', '');
+
+    head.appendChild(rank);
+    head.appendChild(meta);
+    head.appendChild(success);
+
+    const guessWrap = document.createElement('label');
+    guessWrap.className = 'guess-game-input-wrap';
+
+    const guessLabel = document.createElement('span');
+    guessLabel.className = 'guess-game-input-label';
+    guessLabel.textContent = 'Tahminin kaç?';
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.step = '1';
+    input.inputMode = 'numeric';
+    input.className = 'guess-game-input';
+    input.placeholder = 'Mesela 4';
+    input.setAttribute('data-player-id', entry.id);
+    if (guesses[entry.id] != null) input.value = String(guesses[entry.id]);
+
+    guessWrap.appendChild(guessLabel);
+    guessWrap.appendChild(input);
+
+    li.appendChild(head);
+    li.appendChild(guessWrap);
+    leaderboardList.appendChild(li);
+  });
+
+  if (guessGameMatchedIds.size > 0) {
+    applyGuessGameResults(Array.from(guessGameMatchedIds));
+  }
+}
+
+async function loadLeaderboard() {
   if (!leaderboardList) return;
   try {
-    const res = await fetch('/api/leaderboard?by=' + encodeURIComponent(leaderboardBy));
+    const res = await fetch('/api/guess-game/players');
     const data = await parseJsonResponse(res);
-    const list = (data && data.list) ? data.list : [];
-    leaderboardList.innerHTML = '';
-    if (leaderboardEmpty) leaderboardEmpty.hidden = list.length > 0;
-    list.forEach((entry, index) => {
-      const li = document.createElement('li');
-      li.className = 'leaderboard-item';
-      const rank = document.createElement('span');
-      rank.className = 'leaderboard-rank';
-      rank.textContent = '#' + (index + 1);
-      const label = document.createElement('span');
-      label.className = 'leaderboard-label';
-      label.textContent = entry.label || '—';
-      const count = document.createElement('span');
-      count.className = 'leaderboard-count';
-      count.textContent = entry.count + ' adet';
-      li.appendChild(rank);
-      li.appendChild(label);
-      li.appendChild(count);
-      leaderboardList.appendChild(li);
-    });
-    if (leaderboardTabUser && leaderboardTabDept) {
-      leaderboardTabUser.classList.toggle('active', leaderboardBy === 'user');
-      leaderboardTabDept.classList.toggle('active', leaderboardBy === 'department');
-    }
+    guessGamePlayers = Array.isArray(data?.list) ? data.list : [];
+    clearGuessGameResults();
+    setGuessGameSummary('');
+    if (leaderboardCodeForm) leaderboardCodeForm.setAttribute('hidden', '');
+    if (leaderboardCodeInput) leaderboardCodeInput.value = '';
+    resetGuessGameCodeField();
+    renderGuessGamePlayers();
   } catch (err) {
+    guessGamePlayers = [];
+    leaderboardList.innerHTML = '';
     if (leaderboardEmpty) {
       leaderboardEmpty.hidden = false;
-      leaderboardEmpty.textContent = 'Yüklenemedi.';
+      leaderboardEmpty.textContent = 'Tahmin listesi yüklenemedi. Çekmece biraz somurtuyor.';
     }
+    if (leaderboardRevealBtn) leaderboardRevealBtn.disabled = true;
   }
 }
 
 function openLeaderboardModal() {
-  loadLeaderboard(leaderboardBy);
+  loadLeaderboard();
   if (leaderboardOverlay) {
     leaderboardOverlay.removeAttribute('hidden');
     leaderboardOverlay.setAttribute('aria-hidden', 'false');
@@ -500,6 +645,48 @@ function closeLeaderboardModal() {
   if (leaderboardOverlay) {
     leaderboardOverlay.setAttribute('hidden', '');
     leaderboardOverlay.setAttribute('aria-hidden', 'true');
+  }
+}
+
+async function submitGuessGameResults() {
+  const guesses = getStoredGuessGameGuesses();
+  const payloadGuesses = guessGamePlayers
+    .filter((entry) => guesses[entry.id] != null && guesses[entry.id] !== '')
+    .map((entry) => ({ id: entry.id, guess: guesses[entry.id] }));
+
+  if (payloadGuesses.length === 0) {
+    setGuessGameSummary('Boş kağıtla çekiliş kazanılmıyor. Önce biraz tahmin savur.', 'error');
+    return;
+  }
+
+  const code = leaderboardCodeInput ? leaderboardCodeInput.value.trim() : '';
+  if (!code) {
+    setGuessGameSummary('Kapıyı açacak kod lazım. Donate tayfaya bir selam çak.', 'error');
+    if (leaderboardCodeInput) leaderboardCodeInput.focus();
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/guess-game/results', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, guesses: payloadGuesses }),
+    });
+    const data = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(data.error || 'Tahminler kontrol edilemedi.');
+
+    const matchedIds = Array.isArray(data?.matchedIds) ? data.matchedIds : [];
+    applyGuessGameResults(matchedIds);
+
+    if (matchedIds.length > 0) {
+      setGuessGameSummary('Yeşil tik kapanlar işi çözdü. Doğru bilenler istediği bir ürünü alma hakkını kaptı.', 'success');
+    } else {
+      setGuessGameSummary('Bu tur çekmece poker face takıldı. Tik çıkmadı ama efsane geri dönüşler her zaman mümkün.', 'info');
+    }
+  } catch (err) {
+    clearGuessGameResults();
+    setGuessGameSummary(err.message || 'Çekmece tahminlerini şimdilik onaylamadı.', 'error');
+    if (leaderboardCodeInput) leaderboardCodeInput.select();
   }
 }
 
@@ -1428,8 +1615,49 @@ if (leaderboardOverlay) {
     if (e.target === leaderboardOverlay) closeLeaderboardModal();
   });
 }
-if (leaderboardTabUser) leaderboardTabUser.addEventListener('click', () => { loadLeaderboard('user'); });
-if (leaderboardTabDept) leaderboardTabDept.addEventListener('click', () => { loadLeaderboard('department'); });
+if (leaderboardRevealBtn) {
+  leaderboardRevealBtn.addEventListener('click', () => {
+    if (!leaderboardCodeForm) return;
+    leaderboardCodeForm.removeAttribute('hidden');
+    if (leaderboardCodeInput) leaderboardCodeInput.focus();
+  });
+}
+if (leaderboardCodeForm) {
+  leaderboardCodeForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await submitGuessGameResults();
+  });
+}
+if (leaderboardCodeToggle && leaderboardCodeInput) {
+  leaderboardCodeToggle.addEventListener('click', () => {
+    const visible = leaderboardCodeInput.type === 'text';
+    leaderboardCodeInput.type = visible ? 'password' : 'text';
+    leaderboardCodeToggle.textContent = visible ? 'Göster' : 'Gizle';
+    leaderboardCodeToggle.setAttribute('aria-label', visible ? 'Kodu göster' : 'Kodu gizle');
+  });
+}
+if (leaderboardList) {
+  leaderboardList.addEventListener('input', (e) => {
+    const input = e.target;
+    if (!(input instanceof HTMLInputElement) || !input.classList.contains('guess-game-input')) return;
+    const playerId = input.getAttribute('data-player-id') || '';
+    if (!playerId) return;
+
+    const raw = input.value.trim();
+    if (raw === '') {
+      updateGuessGameGuess(playerId, '');
+    } else {
+      const nextValue = Math.max(0, Math.floor(Number(raw) || 0));
+      input.value = String(nextValue);
+      updateGuessGameGuess(playerId, nextValue);
+    }
+
+    if (guessGameMatchedIds.size > 0 || (leaderboardResultSummary && !leaderboardResultSummary.hasAttribute('hidden'))) {
+      clearGuessGameResults();
+      setGuessGameSummary('Tahminler kıpırdadı. Sonuçları tekrar yokla.', 'info');
+    }
+  });
+}
 
 if (emergencyBtn) emergencyBtn.addEventListener('click', () => sendEmergencyAlert());
 if (luckyBtn) luckyBtn.addEventListener('click', pickLucky);

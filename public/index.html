@@ -201,16 +201,29 @@
   <div class="leaderboard-overlay" id="leaderboardOverlay" hidden aria-hidden="true">
     <div class="leaderboard-modal" role="dialog" aria-labelledby="leaderboardModalTitle" aria-modal="true">
       <div class="leaderboard-modal-header">
-        <h2 id="leaderboardModalTitle">🏆 Kim Ne Yedi? – Çekmece Canavarı</h2>
+        <h2 id="leaderboardModalTitle">🏆 Kim Ne Yedi? - Çekmece Tahmin Oyunu</h2>
         <button type="button" class="leaderboard-close" id="leaderboardClose" aria-label="Kapat">&times;</button>
       </div>
-      <div class="leaderboard-tabs">
-        <button type="button" class="leaderboard-tab active" data-by="user" id="leaderboardTabUser">Kullanıcıya göre</button>
-        <button type="button" class="leaderboard-tab" data-by="department" id="leaderboardTabDept">Departmana göre</button>
-      </div>
       <div class="leaderboard-modal-body">
+        <div class="guess-game-intro" id="leaderboardIntro">
+          <p class="guess-game-kicker">Cipsler yenmiş, izler silinmiş, sıra dedektiflikte.</p>
+          <p class="guess-game-copy">Aşağıda çekmeceye dadanan ekip var. Her birinin toplam kaç ürün kaptığını tahmin et. Nokta atışı yapanlar yeşil tiki kapar ve istediği bir ürünü alma hakkını cebe indirir.</p>
+        </div>
+        <div class="guess-game-actions">
+          <button type="button" class="btn btn-primary guess-game-reveal-btn" id="leaderboardRevealBtn">Sonuçları Gör</button>
+          <p class="guess-game-summary" id="leaderboardResultSummary" hidden></p>
+        </div>
+        <form class="guess-game-code-form" id="leaderboardCodeForm" hidden>
+          <label for="leaderboardCodeInput">Gizli kodu fısılda</label>
+          <div class="guess-game-code-row">
+            <input type="password" id="leaderboardCodeInput" name="code" placeholder="Kodu buraya bırak" autocomplete="off">
+            <button type="button" class="admin-password-toggle" id="leaderboardCodeToggle" aria-label="Kodu göster">Göster</button>
+            <button type="submit" class="btn btn-primary">Tahminleri Yokla</button>
+          </div>
+          <p class="guess-game-code-help">Donate yaparak kod alabilirsiniz.</p>
+        </form>
         <ul class="leaderboard-list" id="leaderboardList"></ul>
-        <p class="leaderboard-empty" id="leaderboardEmpty">Henüz tüketim kaydı yok.</p>
+        <p class="leaderboard-empty" id="leaderboardEmpty">Henüz çekmeceyi yağmalayan kimse yok. İlk efsanevi atıştırmalık hamlesini bekliyoruz.</p>
       </div>
     </div>
   </div>
