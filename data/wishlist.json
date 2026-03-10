@@ -1,3 +1,41 @@
 {
-  "items": []
+  "items": [
+    {
+      "id": "34f7e19a87e2a1a7",
+      "name": "Tartini",
+      "addedBy": "fec48bca0383a423",
+      "addedAt": "2026-03-10T07:12:51.345Z",
+      "votes": []
+    },
+    {
+      "id": "1fd0eb0d45b68c0d",
+      "name": "Karam",
+      "addedBy": "5a65c51c6051c965",
+      "addedAt": "2026-03-10T07:13:14.548Z",
+      "votes": [
+        "5a65c51c6051c965",
+        "60cc2a5b31195ec1"
+      ]
+    },
+    {
+      "id": "961dcd18013e8fb5",
+      "name": "cocostar",
+      "addedBy": "60cc2a5b31195ec1",
+      "addedAt": "2026-03-10T07:15:23.363Z",
+      "votes": [
+        "5a65c51c6051c965"
+      ]
+    },
+    {
+      "id": "b9760db889c1f274",
+      "name": "hanimeller mahlepli",
+      "addedBy": "60cc2a5b31195ec1",
+      "addedAt": "2026-03-10T07:17:37.892Z",
+      "votes": [
+        "76f4ae65e263c2eb",
+        "7c4747f5a3a4a4f1",
+        "f41cdac0c0edcc7f"
+      ]
+    }
+  ]
 }

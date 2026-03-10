@@ -1,6 +1,37 @@
 const TOKEN_KEY = 'drawer_stock_admin_token';
 const USER_TOKEN_KEY = 'drawer_stock_user_token';
 const MOOD_KEY = 'drawer_stock_mood';
+const ALERT_COOLDOWN_COOKIE = 'drawer_alert_cooldown_until';
+const ALERT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+let alertCooldownTimerId = null;
+
+function getAlertCooldownRemaining() {
+  const raw = document.cookie
+    .split('; ')
+    .find((row) => row.startsWith(ALERT_COOLDOWN_COOKIE + '='));
+  if (!raw) return 0;
+  const value = Number.parseInt(raw.split('=')[1], 10);
+  if (Number.isNaN(value)) return 0;
+  const remaining = value - Date.now();
+  return remaining > 0 ? remaining : 0;
+}
+
+function setAlertCooldownCookie() {
+  const until = Date.now() + ALERT_COOLDOWN_MS;
+  document.cookie =
+    ALERT_COOLDOWN_COOKIE +
+    '=' +
+    String(until) +
+    '; path=/; max-age=' +
+    String(ALERT_COOLDOWN_MS / 1000) +
+    '; SameSite=Lax';
+}
+
+function formatAlertCooldown(ms) {
+  const minutes = Math.ceil(ms / (60 * 1000));
+  if (minutes >= 60) return '1 saat sonra tekrar gönderebilirsin';
+  return minutes + ' dk sonra tekrar gönderebilirsin';
+}
 
 const MOOD_TEXTS = {
   stressed: 'Sana sert bir kraker lazım, hıncını ondan çıkar.',
@@ -620,6 +651,11 @@ async function sendEmergencyAlert(productId) {
     openRegisterModal();
     return;
   }
+  const cooldownRemaining = getAlertCooldownRemaining();
+  if (cooldownRemaining > 0) {
+    showToast(formatAlertCooldown(cooldownRemaining), 'error');
+    return;
+  }
   try {
     const headers = { 'Content-Type': 'application/json' };
     const token = getUserToken();
@@ -631,6 +667,8 @@ async function sendEmergencyAlert(productId) {
     });
     const data = await parseJsonResponse(res);
     if (res.ok) {
+      setAlertCooldownCookie();
+      updateAlertButtonsState();
       showToast('Uyarı Drawer kanalına gönderildi.', 'success');
     } else if (res.status === 401 && data && data.code === 'USER_REQUIRED') {
       openRegisterModal();
@@ -640,6 +678,27 @@ async function sendEmergencyAlert(productId) {
     }
   } catch (err) {
     showToast(err.message || 'Uyarı gönderilemedi.', 'error');
+  }
+}
+
+function updateAlertButtonsState() {
+  if (alertCooldownTimerId != null) {
+    clearTimeout(alertCooldownTimerId);
+    alertCooldownTimerId = null;
+  }
+  const remaining = getAlertCooldownRemaining();
+  if (emergencyBtn) {
+    if (remaining > 0) {
+      emergencyBtn.disabled = true;
+      emergencyBtn.textContent = formatAlertCooldown(remaining);
+      alertCooldownTimerId = setTimeout(() => {
+        updateAlertButtonsState();
+        loadProducts();
+      }, remaining);
+    } else {
+      emergencyBtn.disabled = false;
+      emergencyBtn.textContent = 'Uyarı gönder';
+    }
   }
 }
 
@@ -894,8 +953,14 @@ function renderProduct(product, isAdmin) {
     const alertBtn = document.createElement('button');
     alertBtn.type = 'button';
     alertBtn.className = 'btn btn-emergency-sm';
-    alertBtn.textContent = 'Uyarı gönder';
-    alertBtn.addEventListener('click', () => sendEmergencyAlert(product.id));
+    const cooldownRemaining = getAlertCooldownRemaining();
+    if (cooldownRemaining > 0) {
+      alertBtn.disabled = true;
+      alertBtn.textContent = formatAlertCooldown(cooldownRemaining);
+    } else {
+      alertBtn.textContent = 'Uyarı gönder';
+      alertBtn.addEventListener('click', () => sendEmergencyAlert(product.id));
+    }
     body.appendChild(alertBtn);
   }
 
@@ -1003,6 +1068,7 @@ async function loadProducts() {
     const products = await fetchProducts();
     allProducts = products;
     renderProducts(products);
+    updateAlertButtonsState();
   } catch (e) {
     if (emptyState) emptyState.textContent = 'Ürünler yüklenemedi. Sayfayı yenileyin.';
   }
