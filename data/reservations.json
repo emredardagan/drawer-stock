@@ -6,13 +6,5 @@
     "quantity": 1,
     "expiresAt": "2026-03-10T08:40:14.533Z",
     "createdAt": "2026-03-10T08:10:14.533Z"
-  },
-  {
-    "id": "7972edbdb82c9fef",
-    "productId": "469c5eb4bf3c70fc",
-    "userId": "f41cdac0c0edcc7f",
-    "quantity": 1,
-    "expiresAt": "2026-03-10T08:51:55.454Z",
-    "createdAt": "2026-03-10T08:21:55.454Z"
   }
 ]
