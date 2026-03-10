@@ -4,7 +4,7 @@
     "nickname": "Cookie Monster",
     "department": "fe",
     "createdAt": "2026-03-08T22:29:54.904Z",
-    "token": "42cff0fa3a8580e00237a383c12e51ed"
+    "token": "e58c944a9a4df46e80e0794a7d1c75d4"
   },
   {
     "id": "30afa3b20f081e92",
@@ -40,5 +40,12 @@
     "department": "P",
     "createdAt": "2026-03-09T10:31:44.064Z",
     "token": "b5fa6f8af8f388730d24ab19d1594f46"
+  },
+  {
+    "id": "2f3f5cc79af7c659",
+    "nickname": "taşralı elizabeth",
+    "department": "yazılım",
+    "createdAt": "2026-03-10T06:54:52.422Z",
+    "token": "4adb15cd8424ff80fced6754d5e1e188"
   }
 ]

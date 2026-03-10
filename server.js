@@ -27,6 +27,21 @@ const FORTUNES = [
   'Bugün kimse "toplantıyı erteleyelim" demeyecek.',
 ];
 
+const ALERT_FUN_MESSAGES = [
+  '"{product}" acil lazım; tek bir dileğim var: "{product}" geri gelsin!',
+  '"{product}" stok gelsin de ne olursa olsun, bu ürün şart!',
+  '"{product}" bitti… çekmece boşaldı, kalbim sıkıştı – lütfen doldurun!',
+  '"{product}" olmadan ofiste hayat zor. Acil tedarik!',
+  '"{product}" için bir paket bile yeter; ben aç kalmayayım.',
+  'Uyarı: "{product}" tükendi, moral desteğe ihtiyacım var.',
+  '"{product}" stok gelirse ilk ben alırım, söz veriyorum!',
+  '"{product}" seni özledim, Drawer\'a sesleniyorum!',
+  '"{product}" için acil stok talebi – gönüllü bir atıştırmalık sever.',
+  'Tek isteğim "{product}" tekrar gelsin. G E L S İ N !',
+  '"{product}" yoksa çekmece boş, ruhum boş – doldurun lütfen!',
+  '"{product}" olmazsa olmaz, haberiniz olsun.',
+];
+
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 if (!process.env.ADMIN_PASSWORD) {
   console.warn('Uyarı: ADMIN_PASSWORD tanımlı değil, varsayılan "admin" kullanılıyor. Gerçek kullanım için .env dosyasında ADMIN_PASSWORD ayarlayın.');
@@ -410,13 +425,17 @@ app.post('/api/products/:id/take', requireUser, (req, res) => {
   }
 });
 
-app.post('/api/alert/emergency', (req, res) => {
+app.post('/api/alert/emergency', requireUser, (req, res) => {
   const webhookUrl = process.env.SLACK_WEBHOOK_URL || process.env.TEAMS_WEBHOOK_URL;
   if (!webhookUrl || !webhookUrl.trim()) {
     return res.status(503).json({ error: 'Webhook not configured', configured: false });
   }
   const { productId } = req.body || {};
   try {
+    const users = readUsers();
+    const user = users.find((u) => u.id === req.userId);
+    const nickname = user && user.nickname ? user.nickname : 'Anonim';
+
     const products = readProducts();
     const reservations = readReservations();
     const now = new Date().toISOString();
@@ -445,15 +464,27 @@ app.post('/api/alert/emergency', (req, res) => {
       }
     }
     const productName = product ? product.name : 'Çekmece';
-    let text = '🚨 *Patron, çekmece boşaldı!*';
-    text += '\n• Ürün: *' + productName + '*';
-    if (reservedCount > 0) {
-      text += '\n• Bu ürün için wishlist\'te ' + reservedCount + ' adet rezervasyon bekliyor.';
-    }
+    const funTemplate = ALERT_FUN_MESSAGES[Math.floor(Math.random() * ALERT_FUN_MESSAGES.length)];
+    const funMessage = String(funTemplate).split('{product}').join(productName);
+    const appUrl = process.env.APP_PUBLIC_URL || `http://${req.headers.host}`;
     const isSlack = (webhookUrl || '').includes('slack.com');
     const payload = isSlack
-      ? { text }
-      : { '@type': 'MessageCard', title: 'Patron, çekmece boşaldı!', text: productName + (reservedCount > 0 ? ' – ' + reservedCount + ' rezervasyon bekliyor.' : '') };
+      ? { text: `🚨 UYARI 🚨\nÜrün: ${productName}\nGönderen: ${nickname}\n\n*${funMessage}*\n\n${appUrl}` }
+      : {
+          '@type': 'MessageCard',
+          '@context': 'http://schema.org/extensions',
+          summary: `🚨 UYARI: ${productName} stok uyarısı`,
+          // Teams MessageCard'da title genelde daha büyük göründüğü için "1 font büyük" etkisini burada veriyoruz.
+          title: `🚨 UYARI: ${productName}`,
+          text: `Ürün: ${productName}<br/>Gönderen: ${nickname}<br/><br/><b>${funMessage}</b><br/><br/><a href="${appUrl}">${appUrl}</a>`,
+          potentialAction: [
+            {
+              '@type': 'OpenUri',
+              name: 'Drawer Stock’u aç',
+              targets: [{ os: 'default', uri: appUrl }],
+            },
+          ],
+        };
     fetch(webhookUrl.trim(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -1,1 +1,10 @@
-[]
+[
+  {
+    "id": "ce624f2f6378447c",
+    "productId": "a7c730f9d2f0d079",
+    "userId": "2f3f5cc79af7c659",
+    "quantity": 1,
+    "expiresAt": "2026-03-10T07:25:44.227Z",
+    "createdAt": "2026-03-10T06:55:44.227Z"
+  }
+]

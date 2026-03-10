@@ -141,6 +141,32 @@ function setUserToken(token) {
   else localStorage.removeItem(USER_TOKEN_KEY);
 }
 
+function getToastContainer() {
+  let el = document.getElementById('toastContainer');
+  if (el) return el;
+  el = document.createElement('div');
+  el.id = 'toastContainer';
+  el.className = 'toast-container';
+  document.body.appendChild(el);
+  return el;
+}
+
+function showToast(message, variant = 'info') {
+  const container = getToastContainer();
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-' + (variant || 'info');
+  toast.setAttribute('role', 'status');
+  toast.textContent = String(message || '');
+  container.appendChild(toast);
+
+  globalThis.requestAnimationFrame(() => toast.classList.add('show'));
+  const ttl = variant === 'error' ? 4500 : 2800;
+  globalThis.setTimeout(() => {
+    toast.classList.remove('show');
+    globalThis.setTimeout(() => toast.remove(), 250);
+  }, ttl);
+}
+
 function updateUserUI() {
   const token = getUserToken();
   if (userRegisterBtn) {
@@ -590,20 +616,30 @@ async function pickLucky() {
 }
 
 async function sendEmergencyAlert(productId) {
+  if (!getUserToken()) {
+    openRegisterModal();
+    return;
+  }
   try {
+    const headers = { 'Content-Type': 'application/json' };
+    const token = getUserToken();
+    if (token) headers.Authorization = 'Bearer ' + token;
     const res = await fetch('/api/alert/emergency', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(productId ? { productId } : {}),
     });
     const data = await parseJsonResponse(res);
     if (res.ok) {
-      alert('Acil durum uyarısı gönderildi.');
+      showToast('Uyarı Drawer kanalına gönderildi.', 'success');
+    } else if (res.status === 401 && data && data.code === 'USER_REQUIRED') {
+      openRegisterModal();
+      showToast('Rumuz girmeden uyarı gönderemezsin.', 'error');
     } else {
-      alert(data.error || data.message || 'Uyarı gönderilemedi. Webhook tanımlı mı?');
+      showToast(data.error || data.message || 'Uyarı gönderilemedi. Webhook tanımlı mı?', 'error');
     }
   } catch (err) {
-    alert(err.message || 'Uyarı gönderilemedi.');
+    showToast(err.message || 'Uyarı gönderilemedi.', 'error');
   }
 }
 
