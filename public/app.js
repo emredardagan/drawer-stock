@@ -2,7 +2,7 @@ const TOKEN_KEY = 'drawer_stock_admin_token';
 const USER_TOKEN_KEY = 'drawer_stock_user_token';
 const MOOD_KEY = 'drawer_stock_mood';
 const ALERT_COOLDOWN_COOKIE = 'drawer_alert_cooldown_until';
-const ALERT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+const ALERT_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 1 day
 let alertCooldownTimerId = null;
 
 function getAlertCooldownRemaining() {

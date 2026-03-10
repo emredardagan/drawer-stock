@@ -1,29 +1,13 @@
 {
   "items": [
     {
-      "id": "34f7e19a87e2a1a7",
-      "name": "Tartini",
-      "addedBy": "fec48bca0383a423",
-      "addedAt": "2026-03-10T07:12:51.345Z",
-      "votes": []
-    },
-    {
-      "id": "1fd0eb0d45b68c0d",
-      "name": "Karam",
-      "addedBy": "5a65c51c6051c965",
-      "addedAt": "2026-03-10T07:13:14.548Z",
-      "votes": [
-        "5a65c51c6051c965",
-        "60cc2a5b31195ec1"
-      ]
-    },
-    {
       "id": "961dcd18013e8fb5",
       "name": "cocostar",
       "addedBy": "60cc2a5b31195ec1",
       "addedAt": "2026-03-10T07:15:23.363Z",
       "votes": [
-        "5a65c51c6051c965"
+        "5a65c51c6051c965",
+        "1c83324709e6a776"
       ]
     },
     {
@@ -34,7 +18,8 @@
       "votes": [
         "76f4ae65e263c2eb",
         "7c4747f5a3a4a4f1",
-        "f41cdac0c0edcc7f"
+        "f41cdac0c0edcc7f",
+        "392a88c158f2cc27"
       ]
     },
     {
@@ -42,6 +27,17 @@
       "name": "Hoşbeş",
       "addedBy": "1c83324709e6a776",
       "addedAt": "2026-03-10T08:30:10.990Z",
+      "votes": [
+        "392a88c158f2cc27",
+        "1c83324709e6a776",
+        "fec48bca0383a423"
+      ]
+    },
+    {
+      "id": "a66c6a4efcab100b",
+      "name": "Diyet Ürünler Gelsin",
+      "addedBy": "fec48bca0383a423",
+      "addedAt": "2026-03-10T10:16:20.942Z",
       "votes": []
     }
   ]
