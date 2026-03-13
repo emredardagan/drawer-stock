@@ -11,9 +11,25 @@
       if (h !== 'localhost' && h !== '127.0.0.1') {
         document.documentElement.classList.add('remote-view');
       }
+      try {
+        if (localStorage.getItem('drawer_stock_skip_scroll_hero') === '1') {
+          document.documentElement.classList.add('skip-scroll-hero');
+        } else {
+          history.scrollRestoration = 'manual';
+          window.scrollTo(0, 0);
+        }
+      } catch (_) {}
     })();
   </script>
   <style>
+    html.skip-scroll-hero .scroll-hero {
+      height: 0 !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
+      visibility: hidden !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
     html.remote-view .admin-bar,
     html.remote-view .add-product-section,
     html.remote-view .btn-add-product { display: none !important; }
@@ -58,6 +74,13 @@
       <p class="loading-text">Yükleniyor…</p>
     </div>
   </div>
+
+  <section class="scroll-hero" id="scrollHero" aria-label="Scroll ile animasyon">
+    <div class="scroll-hero-inner">
+      <img class="scroll-hero-img" id="scrollHeroImg" src="/img/animation/ezgif-frame-001.jpg" alt="" width="1920" height="1080" fetchpriority="high">
+      <p class="scroll-hint" id="scrollHint" aria-live="polite" hidden>Aşağı kaydır</p>
+    </div>
+  </section>
 
   <header class="header">
     <div class="header-inner">
@@ -157,7 +180,7 @@
       </div>
       <form class="reserve-form" id="reserveForm">
         <p class="reserve-product-name" id="reserveProductName"></p>
-        <label for="reserveQuantity">Adet (1 saat geçerli)</label>
+        <label for="reserveQuantity">Adet (30 dakika geçerli)</label>
         <input type="number" id="reserveQuantity" name="quantity" min="1" value="1" required>
         <button type="submit" class="btn btn-primary">Rezerve et</button>
       </form>
@@ -265,6 +288,11 @@
 
   <main class="main">
     <section class="hero">
+      <label class="hero-dont-repeat-wrap">
+        <input type="checkbox" class="hero-dont-repeat-input" id="scrollHeroDontRepeat" aria-describedby="scrollHeroDontRepeatDesc">
+        <span class="hero-dont-repeat-track" aria-hidden="true"></span>
+        <span id="scrollHeroDontRepeatDesc" class="hero-dont-repeat-label">Animasyonu bir daha gösterme</span>
+      </label>
       <div class="hero-info" id="heroInfo">
         <span class="hero-info-item"><span class="hero-info-label">Aktif</span> <span id="statActive">0</span></span>
         <span class="hero-info-item"><span class="hero-info-label">Düşük</span> <span id="statLow">0</span></span>
