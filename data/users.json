@@ -74,7 +74,7 @@
     "nickname": "a",
     "department": "a",
     "createdAt": "2026-03-10T07:28:15.297Z",
-    "token": "220c9b217f22140456fe98a211e9cd0e"
+    "token": "4a8a81b08838d7eb528421ad821a886d"
   },
   {
     "id": "7c4747f5a3a4a4f1",
@@ -138,5 +138,12 @@
     "department": "",
     "createdAt": "2026-03-12T05:38:01.242Z",
     "token": "f4ecb79f2c7befe2c494ce658bc1216b"
+  },
+  {
+    "id": "3333c208b6c3c1a6",
+    "nickname": "Bir dost",
+    "department": "",
+    "createdAt": "2026-03-13T13:49:58.810Z",
+    "token": "494b78012ed72c2a3fd7625065956ee0"
   }
 ]
