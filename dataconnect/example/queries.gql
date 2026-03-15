@@ -1,0 +1,27 @@
+mutation createNewAppDescription($name: String!, $description: String!) @auth(level: USER, insecureReason: "This operation is safe to expose to all logged in users.") {
+  appDescription_insert(data: {name: $name, description: $description}) {
+    id
+  }
+}
+
+query getAppDescriptionById($id: UUID!) @auth(level: USER, insecureReason: "This operation is safe to expose to all logged in users.") {
+  appDescription(id: $id) {
+    name
+    description
+    id
+  }
+}
+
+mutation updateAppDescription($id: UUID!, $description: String!) @auth(level: USER, insecureReason: "This operation is safe to expose to all logged in users.") {
+  appDescription_update(id: $id, data: {description: $description}) {
+    id
+  }
+}
+
+query listAllAppDescriptions @auth(level: PUBLIC, insecureReason: "This operation is safe to expose to the public") {
+  appDescriptions {
+    id
+    name
+    description
+  }
+}

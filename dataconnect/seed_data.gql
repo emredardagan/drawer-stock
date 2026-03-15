@@ -1,0 +1,58 @@
+mutation SeedData @transaction @auth(level: USER, insecureReason: "This is a seed data mutation for development purposes.") {
+  appDescription_insertMany(data: [
+    {
+      id: "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+      name: "My Awesome App",
+      description: "A fantastic application that solves everyday problems."
+    },
+    {
+      id: "b2c3d4e5-f6a7-8901-2345-67890abcdef1",
+      name: "Another Cool Project",
+      description: "A project designed to make learning fun and interactive."
+    }
+  ])
+  dataModel_insertMany(data: [
+    {
+      id: "c3d4e5f6-a7b8-9012-3456-7890abcdef12",
+      name: "User",
+      description: "Stores user information.",
+      appDescriptionId: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+    },
+    {
+      id: "d4e5f6a7-b8c9-0123-4567-890abcdef123",
+      name: "Product",
+      description: "Details of products available in the app.",
+      appDescriptionId: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+    },
+    {
+      id: "e5f6a7b8-c9d0-1234-5678-90abcdef1234",
+      name: "Lesson",
+      description: "Educational lesson content.",
+      appDescriptionId: "b2c3d4e5-f6a7-8901-2345-67890abcdef1"
+    }
+  ])
+  targetAudience_insertMany(data: [
+    {
+      id: "f6a7b8c9-d0e1-2345-6789-0abcdef12345",
+      description: "Tech-savvy individuals aged 18-35.",
+      appDescriptionId: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+    },
+    {
+      id: "a7b8c9d0-e1f2-3456-7890-abcdef123456",
+      description: "Students and educators looking for interactive learning tools.",
+      appDescriptionId: "b2c3d4e5-f6a7-8901-2345-67890abcdef1"
+    }
+  ])
+  userStory_insertMany(data: [
+    {
+      id: "b8c9d0e1-f2a3-4567-8901-abcdef1234567",
+      story: "As a user, I want to easily sign up and create my profile so that I can personalize my app experience.",
+      appDescriptionId: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+    },
+    {
+      id: "c9d0e1f2-a3b4-5678-9012-abcdef12345678",
+      story: "As a student, I want to access engaging lessons so that I can learn new concepts effectively.",
+      appDescriptionId: "b2c3d4e5-f6a7-8901-2345-67890abcdef1"
+    }
+  ])
+}

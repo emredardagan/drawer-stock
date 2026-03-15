@@ -1,0 +1,20 @@
+type AppDescription @table {
+  name: String!
+  description: String!
+}
+
+type TargetAudience @table {
+  description: String!
+  appDescription: AppDescription
+}
+
+type UserStory @table {
+  story: String!
+  appDescription: AppDescription
+}
+
+type DataModel @table {
+  name: String!
+  description: String!
+  appDescription: AppDescription
+}
