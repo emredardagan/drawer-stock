@@ -525,6 +525,14 @@ app.delete('/api/products/:id', requireAdmin, async (req, res) => {
 
 // --- Wishlist Endpoints ---
 
+const TEAMS_WEBHOOK_URL = process.env.TEAMS_WEBHOOK_URL || '';
+const WISHLIST_VOTE_THRESHOLD = 5;
+if (TEAMS_WEBHOOK_URL.trim()) {
+  console.log('[Wishlist] Teams webhook configured (URL length:', TEAMS_WEBHOOK_URL.length, ')');
+} else {
+  console.log('[Wishlist] Teams webhook not configured (set TEAMS_WEBHOOK_URL in .env to enable)');
+}
+
 // Helper to get user from token without requiring it
 async function getUserFromToken(authHeader) {
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
@@ -532,6 +540,47 @@ async function getUserFromToken(authHeader) {
   if (userTokens.has(token)) return userTokens.get(token).id;
   const { data: user } = await supabase.from('users').select('id').eq('token', token).single();
   return user ? user.id : null;
+}
+
+// Fetch wishlist items with vote counts (for internal use)
+async function getWishlistItemsWithVoteCounts() {
+  const { data: items, error: itemsError } = await supabase.from('wishlist_items').select('*');
+  if (itemsError || !items) return [];
+  const { data: votes, error: votesError } = await supabase.from('wishlist_votes').select('*');
+  if (votesError || !votes) return items.map(i => ({ ...i, voteCount: 0 }));
+  return items.map(item => ({
+    ...item,
+    voteCount: votes.filter(v => v.itemId === item.id).length
+  }));
+}
+
+// Send wishlist items with >=5 votes to Teams via webhook (fire-and-forget)
+async function notifyTeamsWishlistOverThreshold() {
+  if (!TEAMS_WEBHOOK_URL || !String(TEAMS_WEBHOOK_URL).trim()) {
+    console.warn('[Wishlist] Teams webhook skipped: TEAMS_WEBHOOK_URL is not set. Set it in .env and restart the server.');
+    return;
+  }
+  try {
+    const items = await getWishlistItemsWithVoteCounts();
+    const overThreshold = items.filter(i => (i.voteCount || 0) >= WISHLIST_VOTE_THRESHOLD);
+    if (overThreshold.length === 0) return;
+    const itemPhrases = overThreshold.map(i => `bir ${i.name} olsa`).join(', ');
+    const text = `İş yerinde çalışanlar bilgisayar karşısına dizilmiş oturuyorlar. O çalışanlar aklından geçiriyor; benim de ${itemPhrases} diyor.\n\nSıradaki bağışınızda bu ürünleri almayı düşünebilirsiniz!`;
+    const payload = { text };
+    const resp = await fetch(TEAMS_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!resp.ok) {
+      const bodyText = await resp.text().catch(() => '');
+      console.error('[Wishlist] Teams webhook non-OK:', resp.status, resp.statusText, bodyText);
+    } else {
+      console.log('[Wishlist] Teams webhook sent for', overThreshold.map(i => i.name).join(', '));
+    }
+  } catch (err) {
+    console.error('[Wishlist] Teams webhook error:', err.message);
+  }
 }
 
 // Get wishlist items
@@ -624,6 +673,10 @@ app.post('/api/wishlist-items/:id/vote', requireUser, async (req, res) => {
     await supabase
       .from('wishlist_votes')
       .insert([{ itemId: id, userId }]);
+    // Notify Teams when any wishlist item has >= 5 votes (fire-and-forget)
+    notifyTeamsWishlistOverThreshold().catch(err => {
+      console.error('[Wishlist] notifyTeamsWishlistOverThreshold threw:', err.message);
+    });
   }
 
   res.json({ success: true });
