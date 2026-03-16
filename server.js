@@ -1,17 +1,23 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
-const fs = require('fs');
 const crypto = require('crypto');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const PORT = process.env.PORT || 3009;
 const HOST = process.env.HOST || '0.0.0.0';
-const DATA_PATH = path.join(__dirname, 'data', 'products.json');
-const USERS_PATH = path.join(__dirname, 'data', 'users.json');
-const RESERVATIONS_PATH = path.join(__dirname, 'data', 'reservations.json');
-const CONSUMPTIONS_PATH = path.join(__dirname, 'data', 'consumptions.json');
-const WISHLIST_PATH = path.join(__dirname, 'data', 'wishlist.json');
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('Supabase URL or Key is missing in .env file');
+  process.exit(1);
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
 const RESERVATION_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 
 const FORTUNES = [
@@ -48,627 +54,653 @@ if (!process.env.ADMIN_PASSWORD) {
 }
 
 const adminTokens = new Set();
-const userTokens = new Map();
+const userTokens = new Map(); // In-memory cache for user tokens
 
 app.use(express.json());
 
-function readProducts() {
-  const raw = fs.readFileSync(DATA_PATH, 'utf8');
-  return JSON.parse(raw);
-}
-
-function writeProducts(products) {
-  fs.writeFileSync(DATA_PATH, JSON.stringify(products, null, 2), 'utf8');
-}
-
-function readUsers() {
-  try {
-    const raw = fs.readFileSync(USERS_PATH, 'utf8');
-    return JSON.parse(raw);
-  } catch (err) {
-    if (err.code === 'ENOENT') return [];
-    throw err;
-  }
-}
-
-function writeUsers(users) {
-  fs.writeFileSync(USERS_PATH, JSON.stringify(users, null, 2), 'utf8');
-}
-
-function readReservations() {
-  try {
-    const raw = fs.readFileSync(RESERVATIONS_PATH, 'utf8');
-    return JSON.parse(raw);
-  } catch (err) {
-    if (err.code === 'ENOENT') return [];
-    throw err;
-  }
-}
-
-function writeReservations(reservations) {
-  fs.writeFileSync(RESERVATIONS_PATH, JSON.stringify(reservations, null, 2), 'utf8');
-}
-
-function cleanupExpiredReservations() {
-  try {
-    const reservations = readReservations();
-    const now = new Date().toISOString();
-    const active = reservations.filter((r) => r.expiresAt > now);
-    if (active.length !== reservations.length) {
-      writeReservations(active);
-      console.log('[Reservations] Removed', reservations.length - active.length, 'expired reservation(s).');
-    }
-  } catch (err) {
-    console.error('[Reservations] Cleanup failed:', err.message);
-  }
-}
-
-function getActiveReservations(reservations, productId) {
+async function cleanupExpiredReservations() {
   const now = new Date().toISOString();
-  return reservations.filter(
-    (r) => r.productId === productId && r.expiresAt > now
-  );
-}
-
-function getReservedQuantity(reservations, productId) {
-  return getActiveReservations(reservations, productId).reduce((sum, r) => sum + (r.quantity || 0), 0);
-}
-
-function readConsumptions() {
-  try {
-    const raw = fs.readFileSync(CONSUMPTIONS_PATH, 'utf8');
-    return JSON.parse(raw);
-  } catch (err) {
-    if (err.code === 'ENOENT') return [];
-    throw err;
+  const { error } = await supabase
+    .from('reservations')
+    .delete()
+    .lt('expiresAt', now);
+  
+  if (error) {
+    console.error('[Reservations] Error cleaning up expired reservations:', error.message);
   }
 }
 
-function writeConsumptions(consumptions) {
-  fs.writeFileSync(CONSUMPTIONS_PATH, JSON.stringify(consumptions, null, 2), 'utf8');
-}
-
-function readWishlist() {
-  try {
-    const raw = fs.readFileSync(WISHLIST_PATH, 'utf8');
-    const data = JSON.parse(raw);
-    return Array.isArray(data.items) ? data : { items: [] };
-  } catch (err) {
-    if (err.code === 'ENOENT') return { items: [] };
-    throw err;
-  }
-}
-
-function writeWishlist(data) {
-  const obj = typeof data === 'object' && data !== null ? data : { items: [] };
-  if (!Array.isArray(obj.items)) obj.items = [];
-  fs.writeFileSync(WISHLIST_PATH, JSON.stringify(obj, null, 2), 'utf8');
-}
-
-function loadUserTokens() {
-  try {
-    const users = readUsers();
-    users.forEach((u) => {
-      if (u.token) userTokens.set(u.token, u.id);
-    });
-  } catch (err) {
-    // ignore
-  }
-}
-loadUserTokens();
-
+// Middleware: Require Admin
 function requireAdmin(req, res, next) {
   const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  if (!token || !adminTokens.has(token)) {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const token = authHeader.split(' ')[1];
+  if (!adminTokens.has(token)) {
+    return res.status(403).json({ error: 'Forbidden' });
   }
   next();
 }
 
-function requireUser(req, res, next) {
+// Middleware: Require User
+async function requireUser(req, res, next) {
   const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  if (!token || !userTokens.has(token)) {
-    return res.status(401).json({ error: 'Unauthorized', code: 'USER_REQUIRED' });
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized' });
   }
-  req.userId = userTokens.get(token);
+  const token = authHeader.split(' ')[1];
+  
+  // Check in-memory cache first
+  if (userTokens.has(token)) {
+    req.user = userTokens.get(token);
+    return next();
+  }
+
+  // Check database
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('token', token)
+    .single();
+
+  if (error || !user) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  userTokens.set(token, user);
+  req.user = user;
   next();
 }
 
-function getUserFromToken(authHeader) {
-  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  if (!token || !userTokens.has(token)) return null;
-  return userTokens.get(token);
-}
+// --- API Endpoints ---
 
-async function imageUrlToBase64(url) {
-  if (!url || typeof url !== 'string') return url;
-  const trimmed = url.trim();
-  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return url;
-  try {
-    const res = await fetch(trimmed, { redirect: 'follow' });
-    if (!res.ok) return url;
-    const contentType = res.headers.get('content-type') || 'image/jpeg';
-    const buffer = Buffer.from(await res.arrayBuffer());
-    const base64 = buffer.toString('base64');
-    return `data:${contentType.split(';')[0]};base64,${base64}`;
-  } catch (err) {
-    console.warn('Image URL to base64 failed:', err.message);
-    return url;
-  }
-}
+// Get lucky product
+app.get('/api/products/lucky', async (req, res) => {
+  const { data: products, error } = await supabase
+    .from('products')
+    .select('*')
+    .gt('quantity', 0);
 
-app.get('/api/products/lucky', (req, res) => {
-  try {
-    const products = readProducts();
-    const reservations = readReservations();
-    const now = new Date().toISOString();
-    const active = reservations.filter((r) => r.expiresAt > now);
-    const available = products.filter((p) => {
-      const qty = Number(p.quantity) || 0;
-      const reserved = active.filter((r) => r.productId === p.id).reduce((s, r) => s + (r.quantity || 0), 0);
-      return qty - reserved > 0;
-    });
-    if (available.length === 0) {
-      return res.status(404).json({ error: 'No product available', message: 'Stokta ürün yok.' });
-    }
-    const product = available[Math.floor(Math.random() * available.length)];
-    res.json({ product });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to pick product' });
+  if (error) {
+    return res.status(500).json({ error: 'Database error' });
   }
+
+  if (!products || products.length === 0) {
+    return res.status(404).json({ error: 'No available products' });
+  }
+
+  const randomProduct = products[Math.floor(Math.random() * products.length)];
+  const randomFortune = FORTUNES[Math.floor(Math.random() * FORTUNES.length)];
+
+  res.json({
+    product: randomProduct,
+    fortune: randomFortune,
+  });
 });
 
-app.get('/api/products', (req, res) => {
-  try {
-    const products = readProducts();
-    const reservations = readReservations();
-    const now = new Date().toISOString();
-    const activeReservations = reservations.filter((r) => r.expiresAt > now);
-    const withAvailable = products.map((p) => {
-      const reserved = activeReservations
-        .filter((r) => r.productId === p.id)
-        .reduce((sum, r) => sum + (r.quantity || 0), 0);
-      const quantity = Number(p.quantity) || 0;
-      return {
-        ...p,
-        availableQuantity: Math.max(0, quantity - reserved),
-        reservedQuantity: reserved,
-      };
-    });
-    res.json(withAvailable);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to read products' });
+// Get products
+app.get('/api/products', async (req, res) => {
+  const { data: products, error } = await supabase
+    .from('products')
+    .select('*');
+
+  if (error) {
+    return res.status(500).json({ error: 'Database error' });
   }
+
+  res.json(products);
 });
 
+// Admin Login
 app.post('/api/auth/login', (req, res) => {
-  const { password } = req.body || {};
-  if (password !== ADMIN_PASSWORD) {
-    return res.status(401).json({ error: 'Invalid password' });
-  }
-  const token = crypto.randomBytes(16).toString('hex');
-  adminTokens.add(token);
-  res.json({ token });
-});
-
-app.post('/api/register', (req, res) => {
-  const { nickname, department } = req.body || {};
-  const nick = typeof nickname === 'string' ? nickname.trim() : '';
-  if (!nick) {
-    return res.status(400).json({ error: 'nickname required' });
-  }
-  try {
-    const users = readUsers();
-    const dept = department != null ? String(department).trim() : '';
-    let user = users.find((u) => u.nickname.toLowerCase() === nick.toLowerCase());
+  const { password } = req.body;
+  if (password === ADMIN_PASSWORD) {
     const token = crypto.randomBytes(16).toString('hex');
-    if (user) {
-      user.department = dept;
-      user.token = token;
-      userTokens.set(token, user.id);
-      writeUsers(users);
-      return res.json({ token, user: { id: user.id, nickname: user.nickname, department: user.department } });
-    }
-    const id = crypto.randomBytes(8).toString('hex');
-    user = {
-      id,
-      nickname: nick,
-      department: dept,
-      createdAt: new Date().toISOString(),
-      token,
-    };
-    users.push(user);
-    writeUsers(users);
-    userTokens.set(token, id);
-    res.status(201).json({ token, user: { id: user.id, nickname: user.nickname, department: user.department } });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to register' });
+    adminTokens.add(token);
+    res.json({ token });
+  } else {
+    res.status(401).json({ error: 'Invalid password' });
   }
 });
 
-app.get('/api/me', (req, res) => {
-  const userId = getUserFromToken(req.headers.authorization);
-  if (!userId) {
+// User Register / Login
+app.post('/api/register', async (req, res) => {
+  let { nickname, department } = req.body;
+  if (!nickname) {
+    return res.status(400).json({ error: 'Nickname is required' });
+  }
+  nickname = nickname.trim();
+  department = (department || '').trim();
+
+  // Check if user exists
+  const { data: existingUser } = await supabase
+    .from('users')
+    .select('*')
+    .ilike('nickname', nickname)
+    .single();
+
+  if (existingUser) {
+    // If exists, just return their token (login)
+    userTokens.set(existingUser.token, existingUser);
+    return res.json({ token: existingUser.token, user: existingUser });
+  }
+
+  // Create new user
+  const newUser = {
+    id: crypto.randomBytes(8).toString('hex'),
+    nickname,
+    department,
+    createdAt: new Date().toISOString(),
+    token: crypto.randomBytes(16).toString('hex'),
+  };
+
+  const { error } = await supabase.from('users').insert([newUser]);
+  if (error) {
+    return res.status(500).json({ error: 'Failed to create user' });
+  }
+
+  userTokens.set(newUser.token, newUser);
+  res.json({ token: newUser.token, user: newUser });
+});
+
+// Get current user
+app.get('/api/me', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  try {
-    const users = readUsers();
-    const user = users.find((u) => u.id === userId);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    res.json({ user: { id: user.id, nickname: user.nickname, department: user.department || '' } });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to read user' });
+  const token = authHeader.split(' ')[1];
+
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('token', token)
+    .single();
+
+  if (error || !user) {
+    return res.status(404).json({ error: 'User not found' });
   }
+
+  res.json(user);
 });
 
-app.get('/api/reservations', requireUser, (req, res) => {
-  try {
-    const reservations = readReservations();
-    const now = new Date().toISOString();
-    const products = readProducts();
-    const myActive = reservations.filter(
-      (r) => r.userId === req.userId && r.expiresAt > now
-    );
-    const withProduct = myActive.map((r) => {
-      const product = products.find((p) => p.id === r.productId);
-      return {
-        ...r,
-        productName: product ? product.name : '',
-      };
-    });
-    res.json(withProduct);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to read reservations' });
+// Get reservations
+app.get('/api/reservations', requireUser, async (req, res) => {
+  await cleanupExpiredReservations();
+  const { data: reservations, error } = await supabase
+    .from('reservations')
+    .select('*');
+
+  if (error) {
+    return res.status(500).json({ error: 'Database error' });
   }
+
+  res.json(reservations);
 });
 
-app.post('/api/reservations', requireUser, (req, res) => {
-  const { productId, quantity } = req.body || {};
-  const qty = Math.max(1, Math.floor(Number(quantity)) || 1);
+// Create reservation
+app.post('/api/reservations', requireUser, async (req, res) => {
+  const { productId } = req.body;
   if (!productId) {
-    return res.status(400).json({ error: 'productId required' });
+    return res.status(400).json({ error: 'productId is required' });
   }
-  try {
-    const products = readProducts();
-    const product = products.find((p) => p.id === productId);
-    if (!product) return res.status(404).json({ error: 'Product not found' });
-    const reservations = readReservations();
-    const now = new Date().toISOString();
-    const active = reservations.filter((r) => r.expiresAt > now && r.productId === productId);
-    const reserved = active.reduce((sum, r) => sum + (r.quantity || 0), 0);
-    const available = Math.max(0, (Number(product.quantity) || 0) - reserved);
-    if (available < qty) {
-      return res.status(400).json({ error: 'Not enough available to reserve', available });
-    }
-    const expiresAt = new Date(Date.now() + RESERVATION_DURATION_MS).toISOString();
-    const id = crypto.randomBytes(8).toString('hex');
-    const reservation = {
-      id,
-      productId,
-      userId: req.userId,
-      quantity: qty,
-      expiresAt,
-      createdAt: now,
-    };
-    reservations.push(reservation);
-    writeReservations(reservations);
-    res.status(201).json(reservation);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to create reservation' });
+
+  const { data: product } = await supabase
+    .from('products')
+    .select('*')
+    .eq('id', productId)
+    .single();
+
+  if (!product) {
+    return res.status(404).json({ error: 'Product not found' });
   }
+
+  await cleanupExpiredReservations();
+
+  const { data: reservations } = await supabase
+    .from('reservations')
+    .select('*')
+    .eq('productId', productId);
+
+  const activeReservationsCount = reservations ? reservations.length : 0;
+  const availableQty = product.quantity - activeReservationsCount;
+
+  if (availableQty <= 0) {
+    return res.status(400).json({ error: 'Not enough available stock to reserve' });
+  }
+
+  const newReservation = {
+    id: crypto.randomBytes(8).toString('hex'),
+    productId,
+    userId: req.user.id,
+    expiresAt: new Date(Date.now() + RESERVATION_DURATION_MS).toISOString(),
+  };
+
+  const { error } = await supabase.from('reservations').insert([newReservation]);
+  if (error) {
+    return res.status(500).json({ error: 'Failed to create reservation' });
+  }
+
+  res.json(newReservation);
 });
 
-app.delete('/api/reservations/:id', requireUser, (req, res) => {
+// Delete reservation
+app.delete('/api/reservations/:id', requireUser, async (req, res) => {
   const { id } = req.params;
-  try {
-    const reservations = readReservations();
-    const removed = reservations.find((r) => r.id === id && r.userId === req.userId);
-    if (!removed) return res.status(404).json({ error: 'Reservation not found' });
-    const next = reservations.filter((r) => r.id !== id || r.userId !== req.userId);
-    writeReservations(next);
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to delete reservation' });
+  const { data: reservation } = await supabase
+    .from('reservations')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (!reservation) {
+    return res.status(404).json({ error: 'Reservation not found' });
   }
+
+  if (reservation.userId !== req.user.id) {
+    return res.status(403).json({ error: 'Not your reservation' });
+  }
+
+  await supabase.from('reservations').delete().eq('id', id);
+  res.json({ success: true });
 });
 
-app.post('/api/products/:id/take', requireUser, (req, res) => {
-  const { id: productId } = req.params;
-  try {
-    const products = readProducts();
-    const product = products.find((p) => p.id === productId);
-    if (!product) return res.status(404).json({ error: 'Product not found' });
-    const reservations = readReservations();
-    const now = new Date().toISOString();
-    const active = reservations.filter((r) => r.expiresAt > now && r.productId === productId);
-    const reserved = active.reduce((sum, r) => sum + (r.quantity || 0), 0);
-    const quantity = Number(product.quantity) || 0;
-    const available = Math.max(0, quantity - reserved);
-    if (available < 1) {
-      return res.status(400).json({ error: 'Not enough available', available: 0 });
-    }
-    const users = readUsers();
-    const user = users.find((u) => u.id === req.userId);
-    const nickname = user ? user.nickname : '';
-    const department = user ? (user.department || '') : '';
-    product.quantity = Math.max(0, quantity - 1);
-    writeProducts(products);
-    const consumptions = readConsumptions();
-    const cId = crypto.randomBytes(8).toString('hex');
-    consumptions.push({
-      id: cId,
-      productId,
-      productName: product.name,
-      userId: req.userId,
-      nickname,
-      department,
-      at: now,
-    });
-    writeConsumptions(consumptions);
-    const fortune = FORTUNES[Math.floor(Math.random() * FORTUNES.length)];
-    res.json({
-      success: true,
-      fortune,
-      product: {
-        id: product.id,
-        name: product.name,
-        quantity: product.quantity,
-        type: product.type,
-      },
-    });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to take product' });
+// Take product
+app.post('/api/products/:id/take', requireUser, async (req, res) => {
+  const { id } = req.params;
+  const { reservationId } = req.body;
+
+  const { data: product } = await supabase
+    .from('products')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (!product) {
+    return res.status(404).json({ error: 'Product not found' });
   }
+
+  await cleanupExpiredReservations();
+
+  if (reservationId) {
+    const { data: reservation } = await supabase
+      .from('reservations')
+      .select('*')
+      .eq('id', reservationId)
+      .single();
+
+    if (!reservation || reservation.productId !== id || reservation.userId !== req.user.id) {
+      return res.status(400).json({ error: 'Invalid or expired reservation' });
+    }
+    await supabase.from('reservations').delete().eq('id', reservationId);
+  } else {
+    const { data: reservations } = await supabase
+      .from('reservations')
+      .select('*')
+      .eq('productId', id);
+    
+    const activeReservationsCount = reservations ? reservations.length : 0;
+    const availableQty = product.quantity - activeReservationsCount;
+
+    if (availableQty <= 0) {
+      return res.status(400).json({ error: 'Product is fully reserved or out of stock' });
+    }
+  }
+
+  if (product.quantity <= 0) {
+    return res.status(400).json({ error: 'Out of stock' });
+  }
+
+  // Update product quantity
+  await supabase
+    .from('products')
+    .update({ quantity: product.quantity - 1 })
+    .eq('id', id);
+
+  // Record consumption
+  const consumption = {
+    id: crypto.randomBytes(8).toString('hex'),
+    productId: product.id,
+    productName: product.name,
+    userId: req.user.id,
+    nickname: req.user.nickname,
+    department: req.user.department,
+    at: new Date().toISOString(),
+  };
+
+  await supabase.from('consumptions').insert([consumption]);
+
+  res.json({ success: true, product: { ...product, quantity: product.quantity - 1 } });
 });
 
-app.post('/api/alert/emergency', requireUser, (req, res) => {
-  const webhookUrl = process.env.SLACK_WEBHOOK_URL || process.env.TEAMS_WEBHOOK_URL;
-  if (!webhookUrl || !webhookUrl.trim()) {
-    return res.status(503).json({ error: 'Webhook not configured', configured: false });
+// Emergency alert
+app.post('/api/alert/emergency', requireUser, async (req, res) => {
+  const { productId } = req.body;
+  if (!productId) {
+    return res.status(400).json({ error: 'productId is required' });
   }
-  const { productId } = req.body || {};
-  try {
-    const users = readUsers();
-    const user = users.find((u) => u.id === req.userId);
-    const nickname = user && user.nickname ? user.nickname : 'Anonim';
 
-    const products = readProducts();
-    const reservations = readReservations();
-    const now = new Date().toISOString();
-    const activeReservations = reservations.filter((r) => r.expiresAt > now);
-    let product = null;
-    let reservedCount = 0;
-    if (productId) {
-      product = products.find((p) => p.id === productId);
-      if (product) {
-        reservedCount = activeReservations.filter((r) => r.productId === productId).reduce((sum, r) => sum + (r.quantity || 0), 0);
-      }
-    }
-    if (!product) {
-      const depleted = products.filter((p) => (Number(p.quantity) || 0) === 0);
-      if (depleted.length === 0) {
-        return res.status(400).json({ error: 'No depleted product to alert', message: 'Tükenen ürün yok.' });
-      }
-      let maxReserved = 0;
-      for (const p of depleted) {
-        const r = activeReservations.filter((x) => x.productId === p.id).reduce((s, x) => s + (x.quantity || 0), 0);
-        if (r >= maxReserved) {
-          maxReserved = r;
-          product = p;
-          reservedCount = r;
-        }
-      }
-    }
-    const productName = product ? product.name : 'Çekmece';
-    const funTemplate = ALERT_FUN_MESSAGES[Math.floor(Math.random() * ALERT_FUN_MESSAGES.length)];
-    const funMessage = String(funTemplate).split('{product}').join(productName);
+  const { data: product } = await supabase
+    .from('products')
+    .select('*')
+    .eq('id', productId)
+    .single();
+
+  if (!product) {
+    return res.status(404).json({ error: 'Product not found' });
+  }
+
+  if (product.quantity > 0) {
+    return res.status(400).json({ error: 'Product is not out of stock!' });
+  }
+
+  const webhookUrl = process.env.TEAMS_WEBHOOK_URL;
+  if (!webhookUrl) {
+    return res.status(500).json({ error: 'Webhook URL not configured' });
+  }
+
+  try {
+    const randomTemplate = ALERT_FUN_MESSAGES[Math.floor(Math.random() * ALERT_FUN_MESSAGES.length)];
+    const funMessage = randomTemplate.replace(/{product}/g, product.name);
     const appUrl = process.env.APP_PUBLIC_URL || `http://${req.headers.host}`;
-    const isSlack = (webhookUrl || '').includes('slack.com');
+
+    const isSlack = webhookUrl.includes('slack.com');
     const payload = isSlack
-      ? { text: `🚨 UYARI 🚨\nÜrün: ${productName}\nGönderen: ${nickname}\n\n*${funMessage}*\n\n${appUrl}` }
+      ? { text: `🚨 UYARI 🚨\nÜrün: ${product.name}\nGönderen: ${req.user.nickname}\n\n*${funMessage}*\n\n${appUrl}` }
       : {
-          '@type': 'MessageCard',
-          '@context': 'http://schema.org/extensions',
-          summary: `🚨 UYARI: ${productName} stok uyarısı`,
-          // Teams MessageCard'da title genelde daha büyük göründüğü için "1 font büyük" etkisini burada veriyoruz.
-          title: `🚨 UYARI: ${productName}`,
-          text: `Ürün: ${productName}<br/>Gönderen: ${nickname}<br/><br/><b>${funMessage}</b><br/><br/><a href="${appUrl}">${appUrl}</a>`,
-          potentialAction: [
+          "@type": "MessageCard",
+          "@context": "http://schema.org/extensions",
+          "themeColor": "FF0000",
+          "summary": `Acil Stok Talebi: ${product.name}`,
+          "text": `Ürün: ${product.name}<br/>Gönderen: ${req.user.nickname}<br/><br/><b>${funMessage}</b><br/><br/><a href="${appUrl}">${appUrl}</a>`,
+          "potentialAction": [
             {
-              '@type': 'OpenUri',
-              name: 'Drawer Stock’u aç',
-              targets: [{ os: 'default', uri: appUrl }],
-            },
-          ],
+              "@type": "OpenUri",
+              "name": "Uygulamaya Git",
+              "targets": [{ os: "default", uri: appUrl }]
+            }
+          ]
         };
-    fetch(webhookUrl.trim(), {
+
+    const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-    })
-      .then((r) => {
-        if (!r.ok) throw new Error('Webhook returned ' + r.status);
-        res.json({ ok: true, product: productName, reservedCount });
-      })
-      .catch((err) => {
-        res.status(502).json({ error: 'Webhook failed', message: err.message });
-      });
+    });
+
+    if (!response.ok) {
+      throw new Error(`Webhook responded with ${response.status}`);
+    }
+
+    res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to send alert', message: err.message });
+    console.error('Webhook error:', err);
+    res.status(500).json({ error: 'Failed to send alert' });
   }
 });
 
-app.get('/api/leaderboard', (req, res) => {
+// Leaderboard
+app.get('/api/leaderboard', async (req, res) => {
   const by = (req.query.by || 'user').toLowerCase();
   const isDepartment = by === 'department';
-  try {
-    const consumptions = readConsumptions();
-    const map = new Map();
-    consumptions.forEach((c) => {
-      const key = isDepartment ? (c.department || 'Belirsiz') : (c.userId || '');
-      const label = isDepartment ? (c.department || 'Belirsiz') : (c.nickname || 'Anonim');
-      if (!map.has(key)) map.set(key, { id: key, label, count: 0 });
-      map.get(key).count += 1;
-    });
-    const list = Array.from(map.values()).sort((a, b) => b.count - a.count);
-    res.json({ by: isDepartment ? 'department' : 'user', list });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to read leaderboard' });
+  
+  const { data: consumptions, error } = await supabase
+    .from('consumptions')
+    .select('*');
+
+  if (error) {
+    return res.status(500).json({ error: 'Database error' });
   }
+
+  const map = new Map();
+  consumptions.forEach((c) => {
+    const key = isDepartment ? (c.department || 'Belirsiz') : (c.userId || '');
+    const label = isDepartment ? (c.department || 'Belirsiz') : (c.nickname || 'Anonim');
+    if (!map.has(key)) map.set(key, { id: key, label, count: 0 });
+    map.get(key).count += 1;
+  });
+
+  const list = Array.from(map.values()).sort((a, b) => b.count - a.count);
+  res.json({ by: isDepartment ? 'department' : 'user', list });
 });
 
+// --- Admin Endpoints ---
+
+// Create product
 app.post('/api/products', requireAdmin, async (req, res) => {
-  const { name, imageUrl, quantity, type } = req.body || {};
-  if (!name || quantity == null) {
-    return res.status(400).json({ error: 'name and quantity required' });
+  const { name, type, imageUrl, quantity } = req.body;
+  if (!name) return res.status(400).json({ error: 'Name is required' });
+
+  const newProduct = {
+    id: crypto.randomBytes(8).toString('hex'),
+    name,
+    type: type || 'Diğer',
+    imageUrl: imageUrl || '',
+    quantity: parseInt(quantity, 10) || 0,
+  };
+
+  const { error } = await supabase.from('products').insert([newProduct]);
+  if (error) {
+    return res.status(500).json({ error: 'Failed to create product' });
   }
-  try {
-    const resolvedImageUrl = imageUrl ? await imageUrlToBase64(String(imageUrl)) : '';
-    const products = readProducts();
-    const id = crypto.randomBytes(8).toString('hex');
-    const product = {
-      id,
-      name: String(name),
-      imageUrl: resolvedImageUrl,
-      quantity: Number(quantity) || 0,
-    };
-    if (type) product.type = String(type);
-    products.push(product);
-    writeProducts(products);
-    res.json(products);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to save product' });
-  }
+
+  res.json(newProduct);
 });
 
-app.patch('/api/products/:id', requireAdmin, (req, res) => {
+// Update product
+app.patch('/api/products/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { name, imageUrl, quantity, type } = req.body || {};
-  try {
-    const products = readProducts();
-    const index = products.findIndex((p) => p.id === id);
-    if (index === -1) return res.status(404).json({ error: 'Product not found' });
-    if (quantity != null) products[index].quantity = Number(quantity) || 0;
-    if (name !== undefined) products[index].name = String(name);
-    if (imageUrl !== undefined) products[index].imageUrl = String(imageUrl);
-    if (type !== undefined) products[index].type = String(type);
-    writeProducts(products);
-    res.json(products);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to update product' });
+  const updates = req.body;
+
+  if (updates.quantity !== undefined) {
+    updates.quantity = parseInt(updates.quantity, 10);
   }
+
+  const { data: product, error } = await supabase
+    .from('products')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error || !product) {
+    return res.status(404).json({ error: 'Product not found or update failed' });
+  }
+
+  res.json(product);
 });
 
-app.delete('/api/products/:id', requireAdmin, (req, res) => {
+// Delete product
+app.delete('/api/products/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  try {
-    const products = readProducts().filter((p) => p.id !== id);
-    writeProducts(products);
-    res.json(products);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to delete product' });
+  const { error } = await supabase.from('products').delete().eq('id', id);
+  
+  if (error) {
+    return res.status(500).json({ error: 'Failed to delete product' });
   }
+
+  res.json({ success: true });
 });
 
-// Wishlist (istek listesi) - add items, vote (requires user/rumuz)
-app.get('/api/wishlist-items', (req, res) => {
+// --- Wishlist Endpoints ---
+
+const TEAMS_WEBHOOK_URL = process.env.TEAMS_WEBHOOK_URL || '';
+const WISHLIST_VOTE_THRESHOLD = 5;
+if (TEAMS_WEBHOOK_URL.trim()) {
+  console.log('[Wishlist] Teams webhook configured (URL length:', TEAMS_WEBHOOK_URL.length, ')');
+} else {
+  console.log('[Wishlist] Teams webhook not configured (set TEAMS_WEBHOOK_URL in .env to enable)');
+}
+
+// Helper to get user from token without requiring it
+async function getUserFromToken(authHeader) {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.split(' ')[1];
+  if (userTokens.has(token)) return userTokens.get(token).id;
+  const { data: user } = await supabase.from('users').select('id').eq('token', token).single();
+  return user ? user.id : null;
+}
+
+// Fetch wishlist items with vote counts (for internal use)
+async function getWishlistItemsWithVoteCounts() {
+  const { data: items, error: itemsError } = await supabase.from('wishlist_items').select('*');
+  if (itemsError || !items) return [];
+  const { data: votes, error: votesError } = await supabase.from('wishlist_votes').select('*');
+  if (votesError || !votes) return items.map(i => ({ ...i, voteCount: 0 }));
+  return items.map(item => ({
+    ...item,
+    voteCount: votes.filter(v => v.itemId === item.id).length
+  }));
+}
+
+// Send wishlist items with >=5 votes to Teams via webhook (fire-and-forget)
+async function notifyTeamsWishlistOverThreshold() {
+  if (!TEAMS_WEBHOOK_URL || !String(TEAMS_WEBHOOK_URL).trim()) {
+    console.warn('[Wishlist] Teams webhook skipped: TEAMS_WEBHOOK_URL is not set. Set it in .env and restart the server.');
+    return;
+  }
   try {
-    const userId = getUserFromToken(req.headers.authorization);
-    const { items } = readWishlist();
-    const users = readUsers();
-    const withNicknames = items.map((item) => {
-      const addedByUser = users.find((u) => u.id === item.addedBy);
-      const votes = Array.isArray(item.votes) ? item.votes : [];
-      return {
-        ...item,
-        addedByNickname: addedByUser ? addedByUser.nickname : null,
-        voteCount: votes.length,
-        hasVoted: userId ? votes.includes(userId) : false,
-      };
+    const items = await getWishlistItemsWithVoteCounts();
+    const overThreshold = items.filter(i => (i.voteCount || 0) >= WISHLIST_VOTE_THRESHOLD);
+    if (overThreshold.length === 0) return;
+    const itemPhrases = overThreshold.map(i => `bir ${i.name} olsa`).join(', ');
+    const text = `İş yerinde çalışanlar bilgisayar karşısına dizilmiş oturuyorlar. O çalışanlar aklından geçiriyor; benim de ${itemPhrases} diyor.\n\nSıradaki bağışınızda bu ürünleri almayı düşünebilirsiniz!`;
+    const payload = { text };
+    const resp = await fetch(TEAMS_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     });
-    const sorted = withNicknames.sort((a, b) => (b.voteCount || 0) - (a.voteCount || 0));
-    res.json({ items: sorted });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to read wishlist' });
-  }
-});
-
-app.post('/api/wishlist-items', requireUser, (req, res) => {
-  const { name } = req.body || {};
-  const trimmed = typeof name === 'string' ? name.trim() : '';
-  if (!trimmed) {
-    return res.status(400).json({ error: 'name required', message: 'Ürün adı gerekli.' });
-  }
-  try {
-    const data = readWishlist();
-    const id = crypto.randomBytes(8).toString('hex');
-    const now = new Date().toISOString();
-    const item = {
-      id,
-      name: trimmed,
-      addedBy: req.userId,
-      addedAt: now,
-      votes: [],
-    };
-    data.items.push(item);
-    writeWishlist(data);
-    res.status(201).json(item);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to add wishlist item' });
-  }
-});
-
-app.post('/api/wishlist-items/:id/vote', requireUser, (req, res) => {
-  const { id } = req.params;
-  try {
-    const data = readWishlist();
-    const item = data.items.find((i) => i.id === id);
-    if (!item) return res.status(404).json({ error: 'Wishlist item not found' });
-    const votes = Array.isArray(item.votes) ? item.votes : [];
-    const idx = votes.indexOf(req.userId);
-    if (idx >= 0) {
-      votes.splice(idx, 1);
+    if (!resp.ok) {
+      const bodyText = await resp.text().catch(() => '');
+      console.error('[Wishlist] Teams webhook non-OK:', resp.status, resp.statusText, bodyText);
     } else {
-      votes.push(req.userId);
+      console.log('[Wishlist] Teams webhook sent for', overThreshold.map(i => i.name).join(', '));
     }
-    item.votes = votes;
-    writeWishlist(data);
-    res.json({ voted: idx < 0, voteCount: votes.length });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to vote' });
+    console.error('[Wishlist] Teams webhook error:', err.message);
   }
+}
+
+// Get wishlist items
+app.get('/api/wishlist-items', async (req, res) => {
+  const userId = await getUserFromToken(req.headers.authorization);
+
+  const { data: items, error: itemsError } = await supabase
+    .from('wishlist_items')
+    .select('*');
+
+  if (itemsError) {
+    return res.status(500).json({ error: 'Database error' });
+  }
+
+  const { data: votes, error: votesError } = await supabase
+    .from('wishlist_votes')
+    .select('*');
+
+  if (votesError) {
+    return res.status(500).json({ error: 'Database error' });
+  }
+
+  const { data: users, error: usersError } = await supabase
+    .from('users')
+    .select('id, nickname');
+
+  if (usersError) {
+    return res.status(500).json({ error: 'Database error' });
+  }
+
+  // Map votes to items
+  const withNicknames = items.map(item => {
+    const itemVotes = votes.filter(v => v.itemId === item.id).map(v => v.userId);
+    const addedByUser = users.find(u => u.id === item.addedBy);
+    return {
+      ...item,
+      addedByNickname: addedByUser ? addedByUser.nickname : null,
+      voteCount: itemVotes.length,
+      hasVoted: userId ? itemVotes.includes(userId) : false,
+    };
+  });
+
+  const sorted = withNicknames.sort((a, b) => (b.voteCount || 0) - (a.voteCount || 0));
+  res.json({ items: sorted });
 });
 
-// Admin: mark wishlist item as received (remove from list)
-app.delete('/api/wishlist-items/:id', requireAdmin, (req, res) => {
+// Add to wishlist
+app.post('/api/wishlist-items', requireUser, async (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Name is required' });
+  }
+
+  const newItem = {
+    id: crypto.randomBytes(8).toString('hex'),
+    name: name.trim(),
+    addedBy: req.user.id,
+    addedAt: new Date().toISOString()
+  };
+
+  const { error } = await supabase.from('wishlist_items').insert([newItem]);
+  if (error) {
+    return res.status(500).json({ error: 'Failed to add wishlist item' });
+  }
+
+  res.json({ ...newItem, votes: [] });
+});
+
+// Vote wishlist item
+app.post('/api/wishlist-items/:id/vote', requireUser, async (req, res) => {
   const { id } = req.params;
-  try {
-    const data = readWishlist();
-    const before = data.items.length;
-    data.items = data.items.filter((i) => i.id !== id);
-    if (data.items.length === before) {
-      return res.status(404).json({ error: 'Wishlist item not found' });
-    }
-    writeWishlist(data);
-    res.json({ removed: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to remove wishlist item' });
+  const userId = req.user.id;
+
+  const { data: existingVote } = await supabase
+    .from('wishlist_votes')
+    .select('*')
+    .eq('itemId', id)
+    .eq('userId', userId)
+    .single();
+
+  if (existingVote) {
+    // Remove vote
+    await supabase
+      .from('wishlist_votes')
+      .delete()
+      .eq('itemId', id)
+      .eq('userId', userId);
+  } else {
+    // Add vote
+    await supabase
+      .from('wishlist_votes')
+      .insert([{ itemId: id, userId }]);
+    // Notify Teams when any wishlist item has >= 5 votes (fire-and-forget)
+    notifyTeamsWishlistOverThreshold().catch(err => {
+      console.error('[Wishlist] notifyTeamsWishlistOverThreshold threw:', err.message);
+    });
   }
+
+  res.json({ success: true });
 });
 
+// Delete wishlist item (Admin only)
+app.delete('/api/wishlist-items/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  
+  // Delete votes first due to foreign key constraints (if any, though we didn't specify them in schema, it's good practice)
+  await supabase.from('wishlist_votes').delete().eq('itemId', id);
+  
+  const { error } = await supabase.from('wishlist_items').delete().eq('id', id);
+  if (error) {
+    return res.status(500).json({ error: 'Failed to delete wishlist item' });
+  }
+
+  res.json({ success: true });
+});
+
+// Serve static files
 app.use(express.static('public'));
 
-const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
-setInterval(cleanupExpiredReservations, CLEANUP_INTERVAL_MS);
-cleanupExpiredReservations(); // run once on startup
-
+// Start server
 app.listen(PORT, HOST, () => {
-  console.log(`Drawer Stock running at http://localhost:${PORT}`);
-  if (HOST === '0.0.0.0') {
-    console.log(`  (network: http://<this-machine-ip>:${PORT})`);
-  }
+  console.log(`Server is running on http://${HOST}:${PORT}`);
 });

@@ -22,7 +22,8 @@
         "7c4747f5a3a4a4f1",
         "f41cdac0c0edcc7f",
         "392a88c158f2cc27",
-        "3ad70fdb25507a43"
+        "3ad70fdb25507a43",
+        "e607ee4844b636bc"
       ]
     },
     {
@@ -74,7 +75,10 @@
       "name": "rafine şekersiz bir şeyler...",
       "addedBy": "e7acf2dfb74a6381",
       "addedAt": "2026-03-13T05:10:56.732Z",
-      "votes": []
+      "votes": [
+        "3ad70fdb25507a43",
+        "e607ee4844b636bc"
+      ]
     },
     {
       "id": "1ea65cf1d7500ce1",
@@ -83,7 +87,30 @@
       "addedAt": "2026-03-13T10:22:22.634Z",
       "votes": [
         "5a65c51c6051c965",
-        "392a88c158f2cc27"
+        "392a88c158f2cc27",
+        "3ad70fdb25507a43"
+      ]
+    },
+    {
+      "id": "84a5ec2f96fe2519",
+      "name": "Ankara simidi",
+      "addedBy": "2f3f5cc79af7c659",
+      "addedAt": "2026-03-16T05:49:41.534Z",
+      "votes": [
+        "2f3f5cc79af7c659",
+        "392a88c158f2cc27",
+        "3ad70fdb25507a43"
+      ]
+    },
+    {
+      "id": "744cc1137e6d20f6",
+      "name": "Leblebi",
+      "addedBy": "414048252eaf7189",
+      "addedAt": "2026-03-16T07:31:54.742Z",
+      "votes": [
+        "414048252eaf7189",
+        "3ad70fdb25507a43",
+        "e607ee4844b636bc"
       ]
     }
   ]
