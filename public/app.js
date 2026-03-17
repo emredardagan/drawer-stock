@@ -716,9 +716,13 @@ async function takeProduct(productId) {
       headers: { Authorization: 'Bearer ' + getUserToken() },
     });
     const data = await parseJsonResponse(res);
-    if (res.ok && data.fortune) {
+    if (res.ok) {
       loadProducts();
-      showFortune(data.fortune);
+      if (data.fortune) {
+        showFortune(data.fortune);
+      } else {
+        alert('Ürün başarıyla alındı.');
+      }
     } else {
       alert(data.error || 'Ürün alınamadı.');
     }

@@ -128,6 +128,8 @@ async function requireUser(req, res, next) {
 
 // Get lucky product
 app.get('/api/products/lucky', async (req, res) => {
+  await cleanupExpiredReservations();
+
   const { data: products, error } = await supabase
     .from('products')
     .select('*')
@@ -141,7 +143,35 @@ app.get('/api/products/lucky', async (req, res) => {
     return res.status(404).json({ error: 'No available products' });
   }
 
-  const randomProduct = products[Math.floor(Math.random() * products.length)];
+  const { data: reservations, error: reservationsError } = await supabase
+    .from('reservations')
+    .select('productId');
+
+  if (reservationsError) {
+    return res.status(500).json({ error: 'Database error' });
+  }
+
+  const reservedCountByProductId = new Map();
+  (reservations || []).forEach((r) => {
+    reservedCountByProductId.set(
+      r.productId,
+      (reservedCountByProductId.get(r.productId) || 0) + 1
+    );
+  });
+
+  const availableProducts = products
+    .map((p) => {
+      const reservedQuantity = reservedCountByProductId.get(p.id) || 0;
+      const availableQuantity = (p.quantity || 0) - reservedQuantity;
+      return { ...p, reservedQuantity, availableQuantity };
+    })
+    .filter((p) => p.availableQuantity > 0);
+
+  if (availableProducts.length === 0) {
+    return res.status(404).json({ error: 'No available products' });
+  }
+
+  const randomProduct = availableProducts[Math.floor(Math.random() * availableProducts.length)];
   const randomFortune = FORTUNES[Math.floor(Math.random() * FORTUNES.length)];
 
   res.json({
@@ -152,6 +182,7 @@ app.get('/api/products/lucky', async (req, res) => {
 
 // Get products
 app.get('/api/products', async (req, res) => {
+  await cleanupExpiredReservations();
   const { data: products, error } = await supabase
     .from('products')
     .select('*');
@@ -160,7 +191,29 @@ app.get('/api/products', async (req, res) => {
     return res.status(500).json({ error: 'Database error' });
   }
 
-  res.json(products);
+  const { data: reservations, error: reservationsError } = await supabase
+    .from('reservations')
+    .select('productId');
+
+  if (reservationsError) {
+    return res.status(500).json({ error: 'Database error' });
+  }
+
+  const reservedCountByProductId = new Map();
+  (reservations || []).forEach((r) => {
+    reservedCountByProductId.set(
+      r.productId,
+      (reservedCountByProductId.get(r.productId) || 0) + 1
+    );
+  });
+
+  const enriched = (products || []).map((p) => {
+    const reservedQuantity = reservedCountByProductId.get(p.id) || 0;
+    const availableQuantity = (p.quantity || 0) - reservedQuantity;
+    return { ...p, reservedQuantity, availableQuantity };
+  });
+
+  res.json(enriched);
 });
 
 // Admin Login
@@ -239,13 +292,48 @@ app.get('/api/reservations', requireUser, async (req, res) => {
   await cleanupExpiredReservations();
   const { data: reservations, error } = await supabase
     .from('reservations')
-    .select('*');
+    .select('*')
+    .eq('userId', req.user.id);
 
   if (error) {
     return res.status(500).json({ error: 'Database error' });
   }
 
-  res.json(reservations);
+  const productIds = Array.from(new Set((reservations || []).map((r) => r.productId)));
+  if (productIds.length === 0) return res.json([]);
+
+  const { data: products, error: productsError } = await supabase
+    .from('products')
+    .select('id,name')
+    .in('id', productIds);
+
+  if (productsError) {
+    return res.status(500).json({ error: 'Database error' });
+  }
+
+  const nameById = new Map((products || []).map((p) => [p.id, p.name]));
+
+  // Group per product so UI can show "Ürün × N" and cancel in one go.
+  const grouped = new Map();
+  (reservations || []).forEach((r) => {
+    const key = r.productId;
+    const existing = grouped.get(key);
+    if (!existing) {
+      grouped.set(key, {
+        id: key, // delete endpoint uses this
+        productId: key,
+        productName: nameById.get(key) || 'Ürün',
+        quantity: 1,
+        expiresAt: r.expiresAt,
+      });
+      return;
+    }
+    existing.quantity += 1;
+    // keep the latest expiry for display/debug
+    if (existing.expiresAt < r.expiresAt) existing.expiresAt = r.expiresAt;
+  });
+
+  res.json(Array.from(grouped.values()));
 });
 
 // Create reservation
@@ -254,6 +342,9 @@ app.post('/api/reservations', requireUser, async (req, res) => {
   if (!productId) {
     return res.status(400).json({ error: 'productId is required' });
   }
+
+  const requestedQtyRaw = req.body && req.body.quantity;
+  const requestedQty = Math.max(1, parseInt(requestedQtyRaw, 10) || 1);
 
   const { data: product } = await supabase
     .from('products')
@@ -279,39 +370,47 @@ app.post('/api/reservations', requireUser, async (req, res) => {
     return res.status(400).json({ error: 'Not enough available stock to reserve' });
   }
 
-  const newReservation = {
+  if (requestedQty > availableQty) {
+    return res.status(400).json({ error: 'Not enough available stock to reserve' });
+  }
+
+  const expiresAt = new Date(Date.now() + RESERVATION_DURATION_MS).toISOString();
+  const newReservations = Array.from({ length: requestedQty }).map(() => ({
     id: crypto.randomBytes(8).toString('hex'),
     productId,
     userId: req.user.id,
-    expiresAt: new Date(Date.now() + RESERVATION_DURATION_MS).toISOString(),
-  };
+    expiresAt,
+  }));
 
-  const { error } = await supabase.from('reservations').insert([newReservation]);
+  const { error } = await supabase.from('reservations').insert(newReservations);
   if (error) {
     return res.status(500).json({ error: 'Failed to create reservation' });
   }
 
-  res.json(newReservation);
+  // Return grouped shape expected by the UI.
+  res.json({
+    id: productId,
+    productId,
+    productName: product.name,
+    quantity: requestedQty,
+    expiresAt,
+  });
 });
 
 // Delete reservation
 app.delete('/api/reservations/:id', requireUser, async (req, res) => {
   const { id } = req.params;
-  const { data: reservation } = await supabase
+  // `id` is productId in the grouped UI list; delete all of the user's active reservations for that product.
+  const { error } = await supabase
     .from('reservations')
-    .select('*')
-    .eq('id', id)
-    .single();
+    .delete()
+    .eq('productId', id)
+    .eq('userId', req.user.id);
 
-  if (!reservation) {
-    return res.status(404).json({ error: 'Reservation not found' });
+  if (error) {
+    return res.status(500).json({ error: 'Failed to delete reservation' });
   }
 
-  if (reservation.userId !== req.user.id) {
-    return res.status(403).json({ error: 'Not your reservation' });
-  }
-
-  await supabase.from('reservations').delete().eq('id', id);
   res.json({ success: true });
 });
 
