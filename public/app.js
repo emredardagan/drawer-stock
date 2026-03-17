@@ -280,6 +280,77 @@ async function loadWishlist() {
       const name = document.createElement('span');
       name.className = 'wishlist-item-name';
       name.textContent = (r.productName || 'Ürün') + ' × ' + (r.quantity || 1);
+      async function takeOneReservation(reservationId) {
+        const body = reservationId ? { reservationId } : {};
+        const r2 = await fetch('/api/products/' + r.productId + '/take', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + token,
+          },
+          body: JSON.stringify(body),
+        });
+        const data = await parseJsonResponse(r2);
+        return { ok: r2.ok, data };
+      }
+
+      const takeOneBtn = document.createElement('button');
+      takeOneBtn.type = 'button';
+      takeOneBtn.className = 'btn btn-take btn-sm';
+      takeOneBtn.textContent = (r.quantity || 1) > 1 ? 'Aldım (1)' : 'Aldım';
+      takeOneBtn.addEventListener('click', async () => {
+        try {
+          const reservationId = Array.isArray(r.reservationIds) ? r.reservationIds[0] : null;
+          const result = await takeOneReservation(reservationId);
+          if (result.ok) {
+            loadWishlist();
+            loadProducts();
+            if (result.data && result.data.fortune) showFortune(result.data.fortune);
+          } else {
+            alert((result.data && (result.data.error || result.data.message)) || 'Ürün alınamadı.');
+          }
+        } catch (e) {
+          alert(e.message || 'Ürün alınamadı.');
+        }
+      });
+
+      let takeAllBtn = null;
+      if ((r.quantity || 1) > 1) {
+        takeAllBtn = document.createElement('button');
+        takeAllBtn.type = 'button';
+        takeAllBtn.className = 'btn btn-outline btn-sm';
+        takeAllBtn.textContent = 'Hepsini aldım';
+        takeAllBtn.addEventListener('click', async () => {
+          try {
+            const ids = Array.isArray(r.reservationIds) ? r.reservationIds.filter(Boolean) : [];
+            if (ids.length === 0) return;
+            takeAllBtn.disabled = true;
+            takeOneBtn.disabled = true;
+
+            let lastFortune = null;
+            for (const id of ids) {
+              const result = await takeOneReservation(id);
+              if (!result.ok) {
+                takeAllBtn.disabled = false;
+                takeOneBtn.disabled = false;
+                alert((result.data && (result.data.error || result.data.message)) || 'Ürün alınamadı.');
+                loadWishlist();
+                loadProducts();
+                return;
+              }
+              if (result.data && result.data.fortune) lastFortune = result.data.fortune;
+            }
+
+            loadWishlist();
+            loadProducts();
+            if (lastFortune) showFortune(lastFortune);
+          } catch (e) {
+            if (takeAllBtn) takeAllBtn.disabled = false;
+            takeOneBtn.disabled = false;
+            alert(e.message || 'Ürün alınamadı.');
+          }
+        });
+      }
       const cancelBtn = document.createElement('button');
       cancelBtn.type = 'button';
       cancelBtn.className = 'btn btn-outline btn-sm';
@@ -299,6 +370,8 @@ async function loadWishlist() {
         }
       });
       li.appendChild(name);
+      li.appendChild(takeOneBtn);
+      if (takeAllBtn) li.appendChild(takeAllBtn);
       li.appendChild(cancelBtn);
       wishlistList.appendChild(li);
     });
@@ -363,14 +436,17 @@ async function loadWishlistItems() {
       if (item.voteCount != null) {
         const votes = document.createElement('span');
         votes.className = 'wishlist-items-item-votes';
-        votes.textContent = item.voteCount + ' oy';
+        const score = item.voteScore != null ? item.voteScore : item.voteCount;
+        votes.textContent = (score != null ? score : 0) + ' oy';
         meta.appendChild(votes);
       }
       content.appendChild(name);
       content.appendChild(meta);
-      const actionBtn = document.createElement('button');
-      actionBtn.type = 'button';
+      const actionWrap = document.createElement('div');
+      actionWrap.className = 'wishlist-items-vote-group';
       if (adminToken) {
+        const actionBtn = document.createElement('button');
+        actionBtn.type = 'button';
         actionBtn.className = 'wishlist-items-vote-btn wishlist-items-received-btn';
         actionBtn.setAttribute('aria-label', 'Alındı olarak işaretle ve listeden kaldır');
         actionBtn.innerHTML = '<span class="wishlist-items-vote-icon">✓</span><span class="wishlist-items-vote-label">Alındı</span>';
@@ -387,13 +463,23 @@ async function loadWishlistItems() {
             alert(e.message || 'Kaldırılamadı.');
           }
         });
+        actionWrap.appendChild(actionBtn);
       } else {
-        actionBtn.className = 'wishlist-items-vote-btn' + (item.hasVoted ? ' voted' : '');
-        actionBtn.setAttribute('aria-label', item.hasVoted ? 'Oyu kaldır' : 'Oy ver');
-        actionBtn.innerHTML = item.hasVoted
-          ? '<span class="wishlist-items-vote-icon">✓</span><span class="wishlist-items-vote-label">Oyladım</span>'
-          : '<span class="wishlist-items-vote-icon">↑</span><span class="wishlist-items-vote-label">Oy ver</span>';
-        actionBtn.addEventListener('click', async () => {
+        const myVote = item.myVote != null ? item.myVote : (item.hasVoted ? 1 : 0);
+
+        const upBtn = document.createElement('button');
+        upBtn.type = 'button';
+        upBtn.className = 'wishlist-items-vote-btn icon-only up' + (myVote === 1 ? ' voted' : '');
+        upBtn.setAttribute('aria-label', myVote === 1 ? 'Upvote kaldır' : 'Upvote ver');
+        upBtn.innerHTML = '<span class="wishlist-items-vote-icon">↑</span>';
+
+        const downBtn = document.createElement('button');
+        downBtn.type = 'button';
+        downBtn.className = 'wishlist-items-vote-btn icon-only down' + (myVote === -1 ? ' voted' : '');
+        downBtn.setAttribute('aria-label', myVote === -1 ? 'Downvote kaldır' : 'Downvote ver');
+        downBtn.innerHTML = '<span class="wishlist-items-vote-icon">↓</span>';
+
+        async function sendVote(value) {
           if (!token) {
             closeWishlistItemsModal();
             openRegisterModal();
@@ -402,17 +488,27 @@ async function loadWishlistItems() {
           try {
             const r = await fetch('/api/wishlist-items/' + item.id + '/vote', {
               method: 'POST',
-              headers: { Authorization: 'Bearer ' + token },
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: 'Bearer ' + token,
+              },
+              body: JSON.stringify({ value }),
             });
             await parseJsonResponse(r);
             if (r.ok) loadWishlistItems();
           } catch (e) {
             alert(e.message || 'Oy verilemedi.');
           }
-        });
+        }
+
+        upBtn.addEventListener('click', () => sendVote(1));
+        downBtn.addEventListener('click', () => sendVote(-1));
+
+        actionWrap.appendChild(upBtn);
+        actionWrap.appendChild(downBtn);
       }
       li.appendChild(content);
-      li.appendChild(actionBtn);
+      li.appendChild(actionWrap);
       wishlistItemsList.appendChild(li);
     });
   } catch (err) {
@@ -619,6 +715,13 @@ async function pickLucky() {
         if (luckyResultActions) {
           luckyResultActions.innerHTML = '';
           const product = data.product;
+          const rerollBtn = document.createElement('button');
+          rerollBtn.type = 'button';
+          rerollBtn.className = 'btn btn-outline btn-lucky-reroll';
+          rerollBtn.textContent = 'Başka öner';
+          rerollBtn.addEventListener('click', () => {
+            pickLucky();
+          });
           const reserveBtn = document.createElement('button');
           reserveBtn.type = 'button';
           reserveBtn.className = 'btn btn-reserve';
@@ -635,6 +738,7 @@ async function pickLucky() {
             closeLuckyModal();
             takeProduct(product.id);
           });
+          luckyResultActions.appendChild(rerollBtn);
           luckyResultActions.appendChild(reserveBtn);
           luckyResultActions.appendChild(takeBtn);
         }

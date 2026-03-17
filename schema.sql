@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS wishlist_items (
 CREATE TABLE IF NOT EXISTS wishlist_votes (
   "itemId" TEXT NOT NULL,
   "userId" TEXT NOT NULL,
+  value INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY ("itemId", "userId")
 );
 

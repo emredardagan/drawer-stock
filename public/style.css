@@ -1094,6 +1094,34 @@ html.skip-scroll-hero .scroll-hint {
   flex-shrink: 0;
 }
 
+.wishlist-items-vote-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.wishlist-items-vote-btn.icon-only {
+  padding: 0.45rem 0.7rem;
+  min-width: 2.25rem;
+  justify-content: center;
+}
+
+.wishlist-items-vote-btn.down {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.wishlist-items-vote-btn.down:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.6);
+}
+
+.wishlist-items-vote-btn.down.voted {
+  background: rgba(239, 68, 68, 0.45);
+  border-color: rgba(239, 68, 68, 0.85);
+}
+
 .wishlist-items-vote-btn:hover {
   background: rgba(74, 158, 255, 0.35);
   border-color: var(--blue-accent);
@@ -1550,6 +1578,11 @@ html.skip-scroll-hero .scroll-hint {
 
 .lucky-result-actions .btn {
   min-width: 7rem;
+}
+
+.lucky-result-actions .btn-lucky-reroll {
+  flex: 1 0 100%;
+  min-width: 0;
 }
 
 /* Mood (Bugün nasılsın?) */

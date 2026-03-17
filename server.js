@@ -69,15 +69,42 @@ const userTokens = new Map(); // In-memory cache for user tokens
 
 app.use(express.json());
 
+function isLocalRequest(req) {
+  const host = (req.headers.host || '').toLowerCase();
+  return host.startsWith('localhost') || host.startsWith('127.0.0.1');
+}
+
+function sendDbError(req, res, error, context) {
+  const message =
+    (error && (error.message || error.error_description || error.details)) ||
+    String(error || 'Unknown database error');
+  const code = error && (error.code || error.status || error.statusCode);
+
+  console.error('[DB]', context || 'Unhandled', { message, code });
+  if (error && error.stack) console.error(error.stack);
+
+  const payload = { error: 'Database error' };
+  if (isLocalRequest(req)) {
+    payload.details = message;
+    if (code != null) payload.code = code;
+  }
+  return res.status(500).json(payload);
+}
+
 async function cleanupExpiredReservations() {
   const now = new Date().toISOString();
-  const { error } = await supabase
-    .from('reservations')
-    .delete()
-    .lt('expiresAt', now);
-  
-  if (error) {
-    console.error('[Reservations] Error cleaning up expired reservations:', error.message);
+  try {
+    const { error } = await supabase
+      .from('reservations')
+      .delete()
+      .lt('expiresAt', now);
+
+    if (error) {
+      console.error('[Reservations] Error cleaning up expired reservations:', error.message || error);
+    }
+  } catch (err) {
+    console.error('[Reservations] Error cleaning up expired reservations (fetch/network):', err && err.message ? err.message : err);
+    if (err && err.stack) console.error(err.stack);
   }
 }
 
@@ -136,7 +163,7 @@ app.get('/api/products/lucky', async (req, res) => {
     .gt('quantity', 0);
 
   if (error) {
-    return res.status(500).json({ error: 'Database error' });
+    return sendDbError(req, res, error, 'GET /api/products/lucky -> products');
   }
 
   if (!products || products.length === 0) {
@@ -148,7 +175,7 @@ app.get('/api/products/lucky', async (req, res) => {
     .select('productId');
 
   if (reservationsError) {
-    return res.status(500).json({ error: 'Database error' });
+    return sendDbError(req, res, reservationsError, 'GET /api/products/lucky -> reservations');
   }
 
   const reservedCountByProductId = new Map();
@@ -188,7 +215,7 @@ app.get('/api/products', async (req, res) => {
     .select('*');
 
   if (error) {
-    return res.status(500).json({ error: 'Database error' });
+    return sendDbError(req, res, error, 'GET /api/products -> products');
   }
 
   const { data: reservations, error: reservationsError } = await supabase
@@ -196,7 +223,7 @@ app.get('/api/products', async (req, res) => {
     .select('productId');
 
   if (reservationsError) {
-    return res.status(500).json({ error: 'Database error' });
+    return sendDbError(req, res, reservationsError, 'GET /api/products -> reservations');
   }
 
   const reservedCountByProductId = new Map();
@@ -296,7 +323,7 @@ app.get('/api/reservations', requireUser, async (req, res) => {
     .eq('userId', req.user.id);
 
   if (error) {
-    return res.status(500).json({ error: 'Database error' });
+    return sendDbError(req, res, error, 'GET /api/reservations -> reservations');
   }
 
   const productIds = Array.from(new Set((reservations || []).map((r) => r.productId)));
@@ -308,7 +335,7 @@ app.get('/api/reservations', requireUser, async (req, res) => {
     .in('id', productIds);
 
   if (productsError) {
-    return res.status(500).json({ error: 'Database error' });
+    return sendDbError(req, res, productsError, 'GET /api/reservations -> products');
   }
 
   const nameById = new Map((products || []).map((p) => [p.id, p.name]));
@@ -324,11 +351,13 @@ app.get('/api/reservations', requireUser, async (req, res) => {
         productId: key,
         productName: nameById.get(key) || 'Ürün',
         quantity: 1,
+        reservationIds: [r.id],
         expiresAt: r.expiresAt,
       });
       return;
     }
     existing.quantity += 1;
+    existing.reservationIds.push(r.id);
     // keep the latest expiry for display/debug
     if (existing.expiresAt < r.expiresAt) existing.expiresAt = r.expiresAt;
   });
@@ -393,6 +422,7 @@ app.post('/api/reservations', requireUser, async (req, res) => {
     productId,
     productName: product.name,
     quantity: requestedQty,
+    reservationIds: newReservations.map((r) => r.id),
     expiresAt,
   });
 });
@@ -558,7 +588,7 @@ app.get('/api/leaderboard', async (req, res) => {
     .select('*');
 
   if (error) {
-    return res.status(500).json({ error: 'Database error' });
+    return sendDbError(req, res, error, 'GET /api/leaderboard -> consumptions');
   }
 
   const map = new Map();
@@ -658,7 +688,8 @@ async function getWishlistItemsWithVoteCounts() {
   if (votesError || !votes) return items.map(i => ({ ...i, voteCount: 0 }));
   return items.map(item => ({
     ...item,
-    voteCount: votes.filter(v => v.itemId === item.id).length
+    // Use upvotes for threshold notifications; treat missing value as +1 for backwards compatibility.
+    voteCount: votes.filter(v => v.itemId === item.id && ((v.value ?? 1) === 1)).length
   }));
 }
 
@@ -700,7 +731,7 @@ app.get('/api/wishlist-items', async (req, res) => {
     .select('*');
 
   if (itemsError) {
-    return res.status(500).json({ error: 'Database error' });
+    return sendDbError(req, res, itemsError, 'GET /api/wishlist-items -> wishlist_items');
   }
 
   const { data: votes, error: votesError } = await supabase
@@ -708,7 +739,7 @@ app.get('/api/wishlist-items', async (req, res) => {
     .select('*');
 
   if (votesError) {
-    return res.status(500).json({ error: 'Database error' });
+    return sendDbError(req, res, votesError, 'GET /api/wishlist-items -> wishlist_votes');
   }
 
   const { data: users, error: usersError } = await supabase
@@ -716,22 +747,33 @@ app.get('/api/wishlist-items', async (req, res) => {
     .select('id, nickname');
 
   if (usersError) {
-    return res.status(500).json({ error: 'Database error' });
+    return sendDbError(req, res, usersError, 'GET /api/wishlist-items -> users');
   }
 
   // Map votes to items
   const withNicknames = items.map(item => {
-    const itemVotes = votes.filter(v => v.itemId === item.id).map(v => v.userId);
+    const itemVotes = votes.filter(v => v.itemId === item.id);
+    const upvoteCount = itemVotes.filter(v => ((v.value ?? 1) === 1)).length;
+    const downvoteCount = itemVotes.filter(v => ((v.value ?? 1) === -1)).length;
+    const voteScore = itemVotes.reduce((sum, v) => sum + (v.value ?? 1), 0);
+    const myVoteRow = userId ? itemVotes.find(v => v.userId === userId) : null;
+    const myVote = myVoteRow ? (myVoteRow.value ?? 1) : 0;
     const addedByUser = users.find(u => u.id === item.addedBy);
     return {
       ...item,
       addedByNickname: addedByUser ? addedByUser.nickname : null,
-      voteCount: itemVotes.length,
-      hasVoted: userId ? itemVotes.includes(userId) : false,
+      // New voting fields
+      voteScore,
+      upvoteCount,
+      downvoteCount,
+      myVote,
+      // Backwards-compatible fields
+      voteCount: upvoteCount,
+      hasVoted: userId ? myVote !== 0 : false,
     };
   });
 
-  const sorted = withNicknames.sort((a, b) => (b.voteCount || 0) - (a.voteCount || 0));
+  const sorted = withNicknames.sort((a, b) => (b.voteScore || 0) - (a.voteScore || 0));
   res.json({ items: sorted });
 });
 
@@ -762,32 +804,81 @@ app.post('/api/wishlist-items/:id/vote', requireUser, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
 
-  const { data: existingVote } = await supabase
+  const requestedValueRaw = req.body && req.body.value;
+  // Backwards compatibility: if no body is sent, treat it as old "toggle upvote".
+  const requestedValue =
+    requestedValueRaw === undefined || requestedValueRaw === null
+      ? 1
+      : Number.parseInt(requestedValueRaw, 10);
+
+  // Only allow -1, 0, 1
+  if (![ -1, 0, 1 ].includes(requestedValue)) {
+    return res.status(400).json({ error: 'Invalid vote value' });
+  }
+
+  const { data: existingVote, error: existingVoteError } = await supabase
     .from('wishlist_votes')
     .select('*')
     .eq('itemId', id)
     .eq('userId', userId)
     .single();
 
-  if (existingVote) {
-    // Remove vote
-    await supabase
-      .from('wishlist_votes')
-      .delete()
-      .eq('itemId', id)
-      .eq('userId', userId);
-  } else {
-    // Add vote
-    await supabase
-      .from('wishlist_votes')
-      .insert([{ itemId: id, userId }]);
-    // Notify Teams when any wishlist item has >= 5 votes (fire-and-forget)
-    notifyTeamsWishlistOverThreshold().catch(err => {
-      console.error('[Wishlist] notifyTeamsWishlistOverThreshold threw:', err.message);
-    });
-  }
+  // Supabase returns an error for "no rows" in .single(); ignore that case.
+  const hasExistingVote = !!existingVote && !existingVoteError;
+  const existingValue = hasExistingVote ? (existingVote.value ?? 1) : 0;
 
-  res.json({ success: true });
+  try {
+    if (requestedValue === 0) {
+      if (hasExistingVote) {
+        const { error: delError } = await supabase
+          .from('wishlist_votes')
+          .delete()
+          .eq('itemId', id)
+          .eq('userId', userId);
+        if (delError) return sendDbError(req, res, delError, 'POST /api/wishlist-items/:id/vote -> delete');
+      }
+      return res.json({ success: true });
+    }
+
+    if (hasExistingVote) {
+      if (existingValue === requestedValue) {
+        // Toggle off
+        const { error: delError } = await supabase
+          .from('wishlist_votes')
+          .delete()
+          .eq('itemId', id)
+          .eq('userId', userId);
+        if (delError) return sendDbError(req, res, delError, 'POST /api/wishlist-items/:id/vote -> toggle delete');
+        return res.json({ success: true });
+      }
+
+      // Switch direction
+      const { error: updateError } = await supabase
+        .from('wishlist_votes')
+        .update({ value: requestedValue })
+        .eq('itemId', id)
+        .eq('userId', userId);
+      if (updateError) return sendDbError(req, res, updateError, 'POST /api/wishlist-items/:id/vote -> update');
+      return res.json({ success: true });
+    }
+
+    // New vote
+    const { error: insertError } = await supabase
+      .from('wishlist_votes')
+      .insert([{ itemId: id, userId, value: requestedValue }]);
+    if (insertError) return sendDbError(req, res, insertError, 'POST /api/wishlist-items/:id/vote -> insert');
+
+    if (requestedValue === 1) {
+      // Notify Teams when any wishlist item has >= 5 upvotes (fire-and-forget)
+      notifyTeamsWishlistOverThreshold().catch(err => {
+        console.error('[Wishlist] notifyTeamsWishlistOverThreshold threw:', err.message);
+      });
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    return sendDbError(req, res, err, 'POST /api/wishlist-items/:id/vote -> unhandled');
+  }
 });
 
 // Delete wishlist item (Admin only)

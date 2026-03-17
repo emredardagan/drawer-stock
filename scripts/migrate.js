@@ -89,7 +89,8 @@ async function migrate() {
           for (const userId of item.votes) {
             dbVotes.push({
               itemId: item.id,
-              userId: userId
+              userId: userId,
+              value: 1
             });
           }
         }
