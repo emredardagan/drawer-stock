@@ -8,15 +8,25 @@ const app = express();
 const PORT = process.env.PORT || 3009;
 const HOST = process.env.HOST || '0.0.0.0';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY || '';
 
 if (!supabaseUrl || !supabaseKey) {
-  console.error('Supabase URL or Key is missing in .env file');
-  process.exit(1);
+  console.error('Supabase URL or Key is missing in environment variables');
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Only create client if URL and Key are provided to avoid crashing on boot
+const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
+
+// Helper to check if DB is configured
+function checkDb(req, res, next) {
+  if (!supabase) {
+    return res.status(500).json({ error: 'Database not configured. Please set Supabase environment variables.' });
+  }
+  next();
+}
+
+app.use('/api', checkDb);
 
 const RESERVATION_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -53,7 +63,8 @@ if (!process.env.ADMIN_PASSWORD) {
   console.warn('Uyarı: ADMIN_PASSWORD tanımlı değil, varsayılan "admin" kullanılıyor. Gerçek kullanım için .env dosyasında ADMIN_PASSWORD ayarlayın.');
 }
 
-const adminTokens = new Set();
+const ADMIN_TOKEN = crypto.createHash('sha256').update(ADMIN_PASSWORD).digest('hex');
+
 const userTokens = new Map(); // In-memory cache for user tokens
 
 app.use(express.json());
@@ -77,7 +88,7 @@ function requireAdmin(req, res, next) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   const token = authHeader.split(' ')[1];
-  if (!adminTokens.has(token)) {
+  if (token !== ADMIN_TOKEN) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   next();
@@ -156,9 +167,7 @@ app.get('/api/products', async (req, res) => {
 app.post('/api/auth/login', (req, res) => {
   const { password } = req.body;
   if (password === ADMIN_PASSWORD) {
-    const token = crypto.randomBytes(16).toString('hex');
-    adminTokens.add(token);
-    res.json({ token });
+    res.json({ token: ADMIN_TOKEN });
   } else {
     res.status(401).json({ error: 'Invalid password' });
   }
@@ -700,7 +709,10 @@ app.delete('/api/wishlist-items/:id', requireAdmin, async (req, res) => {
 // Serve static files
 app.use(express.static('public'));
 
-// Start server
-app.listen(PORT, HOST, () => {
-  console.log(`Server is running on http://${HOST}:${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, HOST, () => {
+    console.log(`Server is running on http://${HOST}:${PORT}`);
+  });
+}
+
+module.exports = app;
