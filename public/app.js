@@ -834,6 +834,7 @@ async function takeProduct(productId) {
 
 function updateAdminUI() {
   const isAdmin = !!getToken();
+  document.documentElement.classList.toggle('admin-logged-in', isAdmin);
   if (adminBar) adminBar.removeAttribute('hidden');
   if (btnAddProduct) btnAddProduct.removeAttribute('hidden');
   if (loginBtn) {
