@@ -433,11 +433,12 @@ async function loadWishlistItems() {
         by.textContent = item.addedByNickname + ' önerdi';
         meta.appendChild(by);
       }
-      if (item.voteCount != null) {
+      if (item.upvoteCount != null || item.downvoteCount != null || item.voteCount != null) {
         const votes = document.createElement('span');
         votes.className = 'wishlist-items-item-votes';
-        const score = item.voteScore != null ? item.voteScore : item.voteCount;
-        votes.textContent = (score != null ? score : 0) + ' oy';
+        const up = item.upvoteCount ?? 0;
+        const down = item.downvoteCount ?? 0;
+        votes.textContent = '+' + up + ' / -' + down + ' oy';
         meta.appendChild(votes);
       }
       content.appendChild(name);
@@ -822,11 +823,7 @@ async function takeProduct(productId) {
     const data = await parseJsonResponse(res);
     if (res.ok) {
       loadProducts();
-      if (data.fortune) {
-        showFortune(data.fortune);
-      } else {
-        alert('Ürün başarıyla alındı.');
-      }
+      if (data.fortune) showFortune(data.fortune);
     } else {
       alert(data.error || 'Ürün alınamadı.');
     }
@@ -837,12 +834,6 @@ async function takeProduct(productId) {
 
 function updateAdminUI() {
   const isAdmin = !!getToken();
-  if (!isLocalhost()) {
-    if (adminBar) adminBar.setAttribute('hidden', '');
-    if (addProductSection) addProductSection.setAttribute('hidden', '');
-    if (btnAddProduct) btnAddProduct.setAttribute('hidden', '');
-    return;
-  }
   if (adminBar) adminBar.removeAttribute('hidden');
   if (btnAddProduct) btnAddProduct.removeAttribute('hidden');
   if (loginBtn) {

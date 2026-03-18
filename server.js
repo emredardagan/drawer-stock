@@ -509,7 +509,8 @@ app.post('/api/products/:id/take', requireUser, async (req, res) => {
 
   await supabase.from('consumptions').insert([consumption]);
 
-  res.json({ success: true, product: { ...product, quantity: product.quantity - 1 } });
+  const fortune = FORTUNES[Math.floor(Math.random() * FORTUNES.length)];
+  res.json({ success: true, product: { ...product, quantity: product.quantity - 1 }, fortune });
 });
 
 // Emergency alert
@@ -685,15 +686,16 @@ async function getWishlistItemsWithVoteCounts() {
   const { data: items, error: itemsError } = await supabase.from('wishlist_items').select('*');
   if (itemsError || !items) return [];
   const { data: votes, error: votesError } = await supabase.from('wishlist_votes').select('*');
-  if (votesError || !votes) return items.map(i => ({ ...i, voteCount: 0 }));
-  return items.map(item => ({
-    ...item,
-    // Use upvotes for threshold notifications; treat missing value as +1 for backwards compatibility.
-    voteCount: votes.filter(v => v.itemId === item.id && ((v.value ?? 1) === 1)).length
-  }));
+  if (votesError || !votes) return items.map(i => ({ ...i, upvoteCount: 0, downvoteCount: 0 }));
+  return items.map(item => {
+    const itemVotes = votes.filter(v => v.itemId === item.id);
+    const upvoteCount = itemVotes.filter(v => ((v.value ?? 1) === 1)).length;
+    const downvoteCount = itemVotes.filter(v => ((v.value ?? 1) === -1)).length;
+    return { ...item, upvoteCount, downvoteCount };
+  });
 }
 
-// Send wishlist items with >=5 votes to Teams via webhook (fire-and-forget)
+// Send wishlist items with >=5 upvotes or >=5 downvotes to Teams via webhook (fire-and-forget)
 async function notifyTeamsWishlistOverThreshold() {
   if (!TEAMS_WEBHOOK_URL || !String(TEAMS_WEBHOOK_URL).trim()) {
     console.warn('[Wishlist] Teams webhook skipped: TEAMS_WEBHOOK_URL is not set. Set it in .env and restart the server.');
@@ -701,10 +703,20 @@ async function notifyTeamsWishlistOverThreshold() {
   }
   try {
     const items = await getWishlistItemsWithVoteCounts();
-    const overThreshold = items.filter(i => (i.voteCount || 0) >= WISHLIST_VOTE_THRESHOLD);
-    if (overThreshold.length === 0) return;
-    const itemPhrases = overThreshold.map(i => `bir ${i.name} olsa`).join(', ');
-    const text = `İş yerinde çalışanlar bilgisayar karşısına dizilmiş oturuyorlar. O çalışanlar aklından geçiriyor; benim de ${itemPhrases} diyor.\n\nSıradaki bağışınızda bu ürünleri almayı düşünebilirsiniz!`;
+    const overUpThreshold = items.filter(i => (i.upvoteCount || 0) >= WISHLIST_VOTE_THRESHOLD);
+    const overDownThreshold = items.filter(i => (i.downvoteCount || 0) >= WISHLIST_VOTE_THRESHOLD);
+    const parts = [];
+    if (overUpThreshold.length > 0) {
+      const itemPhrases = overUpThreshold.map(i => `bir ${i.name}'im olsa`).join(', ');
+      parts.push(`İş yerinde çalışanlar bilgisayar karşısına dizilmiş oturuyorlar. O çalışanlar aklından geçiriyor; benim de ${itemPhrases} diyor.\n\nSıradaki bağışınızda bu ürünleri almayı düşünebilirsiniz!`);
+    }
+    if (overDownThreshold.length > 0) {
+      const itemNames = overDownThreshold.map(i => i.name).join(', ');
+      const isimWord = overDownThreshold.length === 1 ? 'ismi' : 'isimleri';
+      parts.push(`Ben söylemiyorum oylar söylüyor ${itemNames}, istenmiyor. Bir daha ${isimWord} dahi geçmemeli.\n\nAlmayı düşünüyorsanız sakin sakin sakin ha!`);
+    }
+    if (parts.length === 0) return;
+    const text = parts.join('\n\n---\n\n');
     const payload = { text };
     const resp = await fetch(TEAMS_WEBHOOK_URL, {
       method: 'POST',
@@ -715,7 +727,8 @@ async function notifyTeamsWishlistOverThreshold() {
       const bodyText = await resp.text().catch(() => '');
       console.error('[Wishlist] Teams webhook non-OK:', resp.status, resp.statusText, bodyText);
     } else {
-      console.log('[Wishlist] Teams webhook sent for', overThreshold.map(i => i.name).join(', '));
+      const sent = [...overUpThreshold, ...overDownThreshold].map(i => i.name);
+      console.log('[Wishlist] Teams webhook sent for', sent.join(', '));
     }
   } catch (err) {
     console.error('[Wishlist] Teams webhook error:', err.message);
@@ -859,6 +872,9 @@ app.post('/api/wishlist-items/:id/vote', requireUser, async (req, res) => {
         .eq('itemId', id)
         .eq('userId', userId);
       if (updateError) return sendDbError(req, res, updateError, 'POST /api/wishlist-items/:id/vote -> update');
+      notifyTeamsWishlistOverThreshold().catch(err => {
+        console.error('[Wishlist] notifyTeamsWishlistOverThreshold threw:', err.message);
+      });
       return res.json({ success: true });
     }
 
@@ -868,8 +884,8 @@ app.post('/api/wishlist-items/:id/vote', requireUser, async (req, res) => {
       .insert([{ itemId: id, userId, value: requestedValue }]);
     if (insertError) return sendDbError(req, res, insertError, 'POST /api/wishlist-items/:id/vote -> insert');
 
-    if (requestedValue === 1) {
-      // Notify Teams when any wishlist item has >= 5 upvotes (fire-and-forget)
+    // Notify Teams when any wishlist item reaches 5 upvotes or 5 downvotes (fire-and-forget)
+    if (requestedValue === 1 || requestedValue === -1) {
       notifyTeamsWishlistOverThreshold().catch(err => {
         console.error('[Wishlist] notifyTeamsWishlistOverThreshold threw:', err.message);
       });
