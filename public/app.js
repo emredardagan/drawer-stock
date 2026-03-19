@@ -1,10 +1,7 @@
 const TOKEN_KEY = 'drawer_stock_admin_token';
 const USER_TOKEN_KEY = 'drawer_stock_user_token';
 const MOOD_KEY = 'drawer_stock_mood';
-const SKIP_SCROLL_HERO_KEY = 'drawer_stock_skip_scroll_hero';
 const ALERT_COOLDOWN_COOKIE = 'drawer_alert_cooldown_until';
-const SCROLL_HERO_FRAME_FIRST = 1;
-const SCROLL_HERO_FRAME_LAST = 73;
 const ALERT_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 1 day
 let alertCooldownTimerId = null;
 
@@ -1310,93 +1307,44 @@ if (loadingOverlay) {
     loadingOverlay.classList.add('hide');
     setTimeout(() => {
       loadingOverlay.remove();
-      if (localStorage.getItem(SKIP_SCROLL_HERO_KEY) !== '1') {
-        window.scrollTo(0, 0);
-      }
-      // Show "scroll down" hint 1s after page is visible; hide on first scroll
-      if (document.documentElement.classList.contains('skip-scroll-hero')) return;
-      const scrollHint = document.getElementById('scrollHint');
-      if (!scrollHint) return;
-      const showHint = () => {
-        scrollHint.removeAttribute('hidden');
-        scrollHint.classList.add('visible');
-        scrollHint.classList.remove('hidden');
-        const hideOnScroll = () => {
-          scrollHint.classList.add('hidden');
-          scrollHint.classList.remove('visible');
-          scrollHint.setAttribute('hidden', '');
-          window.removeEventListener('scroll', hideOnScroll);
-        };
-        window.addEventListener('scroll', hideOnScroll, { passive: true });
-      };
-      setTimeout(showHint, 1000);
     }, 350);
   }, 1500);
 }
 
-(function initScrollHero() {
-  const scrollHero = document.getElementById('scrollHero');
-  const scrollHeroImg = document.getElementById('scrollHeroImg');
-  const scrollHeroDontRepeat = document.getElementById('scrollHeroDontRepeat');
-  if (!scrollHero || !scrollHeroImg) return;
+(function initAnimationOverlay() {
+  const showAnimationBtn = document.getElementById('showAnimationBtn');
+  const animationOverlay = document.getElementById('animationOverlay');
+  const animationOverlayVideo = document.getElementById('animationOverlayVideo');
+  const animationOverlayClose = document.getElementById('animationOverlayClose');
+  if (!showAnimationBtn || !animationOverlay || !animationOverlayVideo) return;
 
-  function getStoredSkipScrollHero() {
-    try {
-      return localStorage.getItem(SKIP_SCROLL_HERO_KEY) === '1';
-    } catch (_) {
-      return false;
+  function openAnimationOverlay() {
+    animationOverlay.removeAttribute('hidden');
+    animationOverlay.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    animationOverlayVideo.currentTime = 0;
+    animationOverlayVideo.play().catch(() => {});
+  }
+
+  function closeAnimationOverlay() {
+    animationOverlay.setAttribute('hidden', '');
+    animationOverlay.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    animationOverlayVideo.pause();
+  }
+
+  showAnimationBtn.addEventListener('click', openAnimationOverlay);
+  if (animationOverlayClose) {
+    animationOverlayClose.addEventListener('click', closeAnimationOverlay);
+  }
+  animationOverlay.addEventListener('click', (e) => {
+    if (e.target === animationOverlay) closeAnimationOverlay();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && animationOverlay.getAttribute('aria-hidden') === 'false') {
+      closeAnimationOverlay();
     }
-  }
-
-  function setStoredSkipScrollHero(value) {
-    try {
-      if (value) localStorage.setItem(SKIP_SCROLL_HERO_KEY, '1');
-      else localStorage.removeItem(SKIP_SCROLL_HERO_KEY);
-    } catch (_) {}
-  }
-
-  if (scrollHeroDontRepeat) {
-    scrollHeroDontRepeat.checked = getStoredSkipScrollHero();
-    scrollHeroDontRepeat.addEventListener('change', () => {
-      const skip = scrollHeroDontRepeat.checked;
-      setStoredSkipScrollHero(skip);
-      document.documentElement.classList.toggle('skip-scroll-hero', skip);
-    });
-  }
-
-  if (!getStoredSkipScrollHero()) {
-    history.scrollRestoration = 'manual';
-    window.scrollTo(0, 0);
-  }
-
-  let lastFrame = -1;
-  function updateScrollHeroFrame() {
-    const rect = scrollHero.getBoundingClientRect();
-    const viewH = window.innerHeight;
-    const sectionH = scrollHero.offsetHeight;
-    const scrollable = Math.max(0, sectionH - viewH);
-    if (scrollable <= 0) {
-      if (lastFrame !== 1) {
-        lastFrame = 1;
-        scrollHeroImg.src = '/img/animation/ezgif-frame-001.jpg';
-      }
-      return;
-    }
-    const progress = Math.max(0, Math.min(1, -rect.top / scrollable));
-    const frameNum = Math.min(
-      SCROLL_HERO_FRAME_LAST,
-      SCROLL_HERO_FRAME_FIRST + Math.floor(progress * (SCROLL_HERO_FRAME_LAST - SCROLL_HERO_FRAME_FIRST + 1))
-    );
-    const frame = String(frameNum).padStart(3, '0');
-    if (lastFrame !== frameNum) {
-      lastFrame = frameNum;
-      scrollHeroImg.src = '/img/animation/ezgif-frame-' + frame + '.jpg';
-    }
-  }
-
-  window.addEventListener('scroll', updateScrollHeroFrame, { passive: true });
-  window.addEventListener('resize', updateScrollHeroFrame);
-  updateScrollHeroFrame();
+  });
 })();
 
 const donateBtn = document.getElementById('donateBtn');

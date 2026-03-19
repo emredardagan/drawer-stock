@@ -14,24 +14,11 @@
         document.documentElement.classList.add('remote-view');
       }
       try {
-        if (localStorage.getItem('drawer_stock_skip_scroll_hero') === '1') {
-          document.documentElement.classList.add('skip-scroll-hero');
-        } else {
-          history.scrollRestoration = 'manual';
-          window.scrollTo(0, 0);
-        }
+        history.scrollRestoration = 'auto';
       } catch (_) {}
     })();
   </script>
   <style>
-    html.skip-scroll-hero .scroll-hero {
-      height: 0 !important;
-      min-height: 0 !important;
-      overflow: hidden !important;
-      visibility: hidden !important;
-      margin: 0 !important;
-      padding: 0 !important;
-    }
     html.remote-view:not(.admin-logged-in) .add-product-section,
     html.remote-view:not(.admin-logged-in) .btn-add-product { display: none !important; }
   </style>
@@ -75,13 +62,6 @@
       <p class="loading-text">Yükleniyor…</p>
     </div>
   </div>
-
-  <section class="scroll-hero" id="scrollHero" aria-label="Scroll ile animasyon">
-    <div class="scroll-hero-inner">
-      <img class="scroll-hero-img" id="scrollHeroImg" src="/img/animation/ezgif-frame-001.jpg" alt="" width="1920" height="1080" fetchpriority="high">
-      <p class="scroll-hint" id="scrollHint" aria-live="polite" hidden>Aşağı kaydır</p>
-    </div>
-  </section>
 
   <header class="header">
     <div class="header-inner">
@@ -269,6 +249,13 @@
     </div>
   </div>
 
+  <div class="animation-overlay" id="animationOverlay" hidden aria-hidden="true">
+    <div class="animation-overlay-inner">
+      <video class="animation-overlay-video" id="animationOverlayVideo" src="/img/animation/source.mp4" controls playsinline aria-label="Animasyon"></video>
+      <button type="button" class="animation-overlay-close" id="animationOverlayClose" aria-label="Kapat">&times;</button>
+    </div>
+  </div>
+
   <div class="mood-overlay" id="moodOverlay" hidden aria-hidden="true">
     <div class="mood-modal" role="dialog" aria-labelledby="moodModalTitle" aria-modal="true">
       <div class="mood-modal-header">
@@ -289,11 +276,7 @@
 
   <main class="main">
     <section class="hero">
-      <label class="hero-dont-repeat-wrap">
-        <input type="checkbox" class="hero-dont-repeat-input" id="scrollHeroDontRepeat" aria-describedby="scrollHeroDontRepeatDesc">
-        <span class="hero-dont-repeat-track" aria-hidden="true"></span>
-        <span id="scrollHeroDontRepeatDesc" class="hero-dont-repeat-label">Animasyonu bir daha gösterme</span>
-      </label>
+      <button type="button" class="btn btn-show-animation hero-show-animation-btn" id="showAnimationBtn" aria-label="Animasyonu göster">🎬 Animasyonu göster</button>
       <div class="hero-info" id="heroInfo">
         <span class="hero-info-item"><span class="hero-info-label">Aktif</span> <span id="statActive">0</span></span>
         <span class="hero-info-item"><span class="hero-info-label">Düşük</span> <span id="statLow">0</span></span>

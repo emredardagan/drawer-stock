@@ -341,70 +341,6 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* Scroll-driven hero (frames 001–073) */
-.scroll-hero {
-  position: relative;
-  width: 100%;
-  height: 300vh;
-  background: var(--bg-dark);
-}
-
-.scroll-hero-inner {
-  position: sticky;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  box-sizing: border-box;
-}
-
-.scroll-hero-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-}
-
-@keyframes scroll-hint-bounce {
-  0%, 100% { transform: translateX(-50%) translateY(0); }
-  50% { transform: translateX(-50%) translateY(10px); }
-}
-
-.scroll-hint {
-  position: absolute;
-  bottom: 1.5rem;
-  left: 50%;
-  transform: translateX(-50%);
-  margin: 0;
-  padding: 0.75rem 1.5rem;
-  font-size: 2rem;
-  font-weight: 600;
-  color: var(--white);
-  background: rgba(0, 0, 0, 0.5);
-  border-radius: 999px;
-  backdrop-filter: blur(8px);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.35s ease-out;
-}
-
-.scroll-hint.visible {
-  opacity: 1;
-  animation: scroll-hint-bounce 1.2s ease-in-out infinite;
-}
-
-.scroll-hint.hidden {
-  opacity: 0;
-}
-
-html.skip-scroll-hero .scroll-hint {
-  display: none !important;
-}
-
 /* Hero */
 .hero {
   position: relative;
@@ -416,76 +352,27 @@ html.skip-scroll-hero .scroll-hint {
   flex-wrap: wrap;
 }
 
-.hero-dont-repeat-wrap {
+.hero-show-animation-btn {
   position: absolute;
   left: 1.5rem;
   top: 50%;
   transform: translateY(-50%);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.75rem;
-  cursor: pointer;
   font-size: 0.9rem;
-  color: var(--gray-400);
-  padding: 0.5rem 0.75rem;
+  padding: 0.5rem 1rem;
   background: var(--bg-card);
   border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--gray-400);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+  cursor: pointer;
   z-index: 1;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
 }
 
-.hero-dont-repeat-wrap:hover {
+.hero-show-animation-btn:hover {
   color: var(--white);
   border-color: rgba(255, 255, 255, 0.18);
-}
-
-.hero-dont-repeat-input {
-  position: absolute;
-  width: 0;
-  height: 0;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.hero-dont-repeat-track {
-  position: relative;
-  width: 2.75rem;
-  height: 1.5rem;
-  flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 999px;
-  transition: background 0.2s ease;
-}
-
-.hero-dont-repeat-track::after {
-  content: '';
-  position: absolute;
-  top: 0.2rem;
-  left: 0.2rem;
-  width: 1.1rem;
-  height: 1.1rem;
-  background: var(--white);
-  border-radius: 50%;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  transition: transform 0.2s ease;
-}
-
-.hero-dont-repeat-input:checked + .hero-dont-repeat-track {
-  background: var(--blue-accent);
-}
-
-.hero-dont-repeat-input:checked + .hero-dont-repeat-track::after {
-  transform: translateX(1.35rem);
-}
-
-.hero-dont-repeat-input:focus-visible + .hero-dont-repeat-track {
-  outline: 2px solid var(--blue-accent);
-  outline-offset: 2px;
-}
-
-.hero-dont-repeat-label {
-  white-space: nowrap;
+  background: var(--bg-card-hover);
 }
 
 .hero-info {
@@ -694,6 +581,65 @@ html.skip-scroll-hero .scroll-hint {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+}
+
+/* Animation overlay (video) */
+.animation-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+
+.animation-overlay[aria-hidden="false"] {
+  opacity: 1;
+  visibility: visible;
+}
+
+.animation-overlay[hidden] {
+  display: flex !important;
+}
+
+.animation-overlay-inner {
+  position: relative;
+  max-width: 95vw;
+  max-height: 95vh;
+  width: 100%;
+}
+
+.animation-overlay-video {
+  width: 100%;
+  max-height: 95vh;
+  object-fit: contain;
+  border-radius: var(--radius);
+  display: block;
+}
+
+.animation-overlay-close {
+  position: absolute;
+  top: -2.5rem;
+  right: 0;
+  background: none;
+  border: none;
+  color: var(--gray-400);
+  font-size: 2rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  transition: color 0.2s, background 0.2s;
+}
+
+.animation-overlay-close:hover {
+  color: var(--white);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* Register overlay & modal */
@@ -1561,11 +1507,10 @@ html.skip-scroll-hero .scroll-hint {
     align-items: stretch;
   }
 
-  .hero-dont-repeat-wrap {
+  .hero-show-animation-btn {
     position: static;
     transform: none;
     width: 100%;
-    justify-content: space-between;
     order: 1;
   }
 
@@ -1632,7 +1577,7 @@ html.skip-scroll-hero .scroll-hint {
     margin-left: 0;
   }
 
-  .hero-dont-repeat-wrap {
+  .hero-show-animation-btn {
     position: static;
     transform: none;
     width: 100%;
@@ -1665,7 +1610,7 @@ html.skip-scroll-hero .scroll-hint {
     align-items: stretch;
   }
 
-  .hero-dont-repeat-wrap {
+  .hero-show-animation-btn {
     position: static;
     width: 100%;
     max-width: none;
