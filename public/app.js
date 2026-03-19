@@ -1037,18 +1037,18 @@ function renderProduct(product, isAdmin) {
   if (hasUser && available >= 1) {
     const actionsWrap = document.createElement('div');
     actionsWrap.className = 'product-card-actions';
-    const reserveBtn = document.createElement('button');
-    reserveBtn.type = 'button';
-    reserveBtn.className = 'btn btn-reserve';
-    reserveBtn.textContent = 'Rezerve et';
-    reserveBtn.addEventListener('click', () => openReserveModal(product));
-    actionsWrap.appendChild(reserveBtn);
     const takeBtn = document.createElement('button');
     takeBtn.type = 'button';
     takeBtn.className = 'btn btn-take';
     takeBtn.textContent = 'Aldım';
     takeBtn.addEventListener('click', () => takeProduct(product.id));
     actionsWrap.appendChild(takeBtn);
+    const reserveBtn = document.createElement('button');
+    reserveBtn.type = 'button';
+    reserveBtn.className = 'btn btn-reserve';
+    reserveBtn.textContent = 'Rezerve et';
+    reserveBtn.addEventListener('click', () => openReserveModal(product));
+    actionsWrap.appendChild(reserveBtn);
     body.appendChild(actionsWrap);
   }
 

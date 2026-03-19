@@ -564,6 +564,14 @@ html.skip-scroll-hero .scroll-hint {
   flex-shrink: 0;
 }
 
+.hero-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
 /* Hero action buttons – unified font */
 .btn-donate,
 .btn-wishlist-items,
@@ -1581,6 +1589,10 @@ html.skip-scroll-hero .scroll-hint {
     order: 3;
   }
 
+  .hero-action-buttons {
+    grid-template-columns: 1fr;
+  }
+
   .hero-mood-bar {
     flex-direction: column;
     align-items: stretch;
@@ -1606,18 +1618,36 @@ html.skip-scroll-hero .scroll-hint {
 }
 
 @media (max-width: 980px) {
+  .hero {
+    padding-bottom: 1.5rem;
+  }
+
+  .hero-action-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .hero-action-buttons .btn-donate {
+    margin-left: 0;
+  }
+
   .hero-dont-repeat-wrap {
-    top: auto;
-    left: 1rem;
-    right: 1rem;
-    bottom: 1rem;
+    position: static;
     transform: none;
-    width: auto;
-    max-width: calc(100% - 2rem);
+    width: 100%;
+    max-width: none;
+    order: 3;
+    margin-top: 1rem;
   }
 
   .hero-info {
     right: 1rem;
+    order: 1;
+  }
+
+  .hero-left {
+    order: 2;
   }
 
   .hero-mood-bar {
@@ -2404,7 +2434,7 @@ html.skip-scroll-hero .scroll-hint {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 8px;
 }
 
 .product-name-row {
@@ -2412,7 +2442,7 @@ html.skip-scroll-hero .scroll-hint {
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
-  margin-bottom: 0.4rem;
+  min-height: 2.85em;
 }
 
 .product-name-row .product-name {
@@ -2435,7 +2465,6 @@ html.skip-scroll-hero .scroll-hint {
 .product-quantity {
   font-size: 0.9rem;
   font-weight: 600;
-  margin-bottom: 0.75rem;
 }
 
 .product-quantity.in-stock {
@@ -2456,11 +2485,9 @@ html.skip-scroll-hero .scroll-hint {
 
 .product-card-actions {
   display: flex;
+  flex-direction: column;
   align-items: stretch;
-  gap: 0.75rem;
-  margin-top: 0.75rem;
-  margin-bottom: 0;
-  flex-wrap: nowrap;
+  gap: 8px;
 }
 
 .product-card-actions .btn {
