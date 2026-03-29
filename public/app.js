@@ -678,7 +678,7 @@ function openLuckyModal() {
   if (luckyResult) {
     luckyResult.setAttribute('hidden', '');
     luckyResult.classList.remove('lucky-result--visible');
-    luckyResultProduct.innerHTML = '';
+    if (luckyResultProduct) luckyResultProduct.innerHTML = '';
     if (luckyResultName) luckyResultName.textContent = '';
     if (luckyResultActions) luckyResultActions.innerHTML = '';
   }
