@@ -102,6 +102,14 @@ const luckyResult = document.getElementById('luckyResult');
 const luckyResultProduct = document.getElementById('luckyResultProduct');
 const luckyResultName = document.getElementById('luckyResultName');
 const luckyResultActions = document.getElementById('luckyResultActions');
+const luckyGifWrap = document.getElementById('luckyGifWrap');
+const luckyGifImg = document.getElementById('luckyGifImg');
+
+const LUCKY_DICE_MIN_MS = 500;
+const LUCKY_GIF_DURATION_MS = 4000;
+const LUCKY_GIF_URL = '/img/kado.gif';
+
+let luckyRunId = 0;
 const moodOverlay = document.getElementById('moodOverlay');
 const moodOptions = document.getElementById('moodOptions');
 const footerMoodBar = document.getElementById('footerMoodBar');
@@ -662,90 +670,154 @@ function openLuckyModal() {
     luckySpinner.removeAttribute('hidden');
     luckySpinner.setAttribute('aria-hidden', 'false');
   }
+  if (luckyGifWrap) {
+    luckyGifWrap.setAttribute('hidden', '');
+    luckyGifWrap.classList.remove('lucky-gif-wrap--exit');
+  }
+  if (luckyGifImg) luckyGifImg.removeAttribute('src');
   if (luckyResult) {
     luckyResult.setAttribute('hidden', '');
-    luckyResultProduct.innerHTML = '';
+    luckyResult.classList.remove('lucky-result--visible');
+    if (luckyResultProduct) luckyResultProduct.innerHTML = '';
     if (luckyResultName) luckyResultName.textContent = '';
+    if (luckyResultActions) luckyResultActions.innerHTML = '';
   }
   luckyOverlay.removeAttribute('hidden');
   luckyOverlay.setAttribute('aria-hidden', 'false');
 }
 
 function closeLuckyModal() {
+  luckyRunId += 1;
   if (luckyOverlay) {
     luckyOverlay.setAttribute('hidden', '');
     luckyOverlay.setAttribute('aria-hidden', 'true');
   }
+  if (luckyGifWrap) {
+    luckyGifWrap.setAttribute('hidden', '');
+    luckyGifWrap.classList.remove('lucky-gif-wrap--exit');
+  }
+  if (luckyGifImg) luckyGifImg.removeAttribute('src');
+  if (luckyResult) luckyResult.classList.remove('lucky-result--visible');
+}
+
+function fillLuckyResult(product) {
+  if (!luckyResult || !luckyResultActions) return;
+  if (luckyResultProduct) {
+    luckyResultProduct.innerHTML = '';
+    if (product.imageUrl) {
+      const img = document.createElement('img');
+      img.src = product.imageUrl;
+      img.alt = product.name;
+      img.className = 'lucky-product-img';
+      luckyResultProduct.appendChild(img);
+    } else {
+      const span = document.createElement('span');
+      span.className = 'lucky-product-placeholder';
+      span.textContent = '📦';
+      luckyResultProduct.appendChild(span);
+    }
+  }
+  if (luckyResultName) luckyResultName.textContent = product.name;
+  luckyResultActions.innerHTML = '';
+  const rerollBtn = document.createElement('button');
+  rerollBtn.type = 'button';
+  rerollBtn.className = 'btn btn-outline btn-lucky-reroll';
+  rerollBtn.textContent = 'Başka öner';
+  rerollBtn.addEventListener('click', () => {
+    pickLucky();
+  });
+  const reserveBtn = document.createElement('button');
+  reserveBtn.type = 'button';
+  reserveBtn.className = 'btn btn-reserve';
+  reserveBtn.textContent = 'Rezerve et';
+  reserveBtn.addEventListener('click', () => {
+    openReserveModal(product);
+    closeLuckyModal();
+  });
+  const takeBtn = document.createElement('button');
+  takeBtn.type = 'button';
+  takeBtn.className = 'btn btn-take';
+  takeBtn.textContent = 'Aldım';
+  takeBtn.addEventListener('click', () => {
+    closeLuckyModal();
+    takeProduct(product.id);
+  });
+  luckyResultActions.appendChild(rerollBtn);
+  luckyResultActions.appendChild(reserveBtn);
+  luckyResultActions.appendChild(takeBtn);
 }
 
 async function pickLucky() {
+  luckyRunId += 1;
+  const runId = luckyRunId;
   openLuckyModal();
-  const duration = 1500;
   const start = Date.now();
   try {
     const res = await fetch('/api/products/lucky');
     const data = await parseJsonResponse(res);
     const elapsed = Date.now() - start;
-    const remaining = Math.max(0, duration - elapsed);
+    const remaining = Math.max(0, LUCKY_DICE_MIN_MS - elapsed);
     await new Promise((r) => setTimeout(r, remaining));
-    if (res.ok && data.product) {
-      if (luckySpinner) {
-        luckySpinner.setAttribute('hidden', '');
-        luckySpinner.setAttribute('aria-hidden', 'true');
-      }
-      if (luckyResult) {
-        luckyResult.removeAttribute('hidden');
-        if (luckyResultProduct) {
-          if (data.product.imageUrl) {
-            const img = document.createElement('img');
-            img.src = data.product.imageUrl;
-            img.alt = data.product.name;
-            img.className = 'lucky-product-img';
-            luckyResultProduct.appendChild(img);
-          } else {
-            const span = document.createElement('span');
-            span.className = 'lucky-product-placeholder';
-            span.textContent = '📦';
-            luckyResultProduct.appendChild(span);
-          }
-        }
-        if (luckyResultName) luckyResultName.textContent = data.product.name;
-        if (luckyResultActions) {
-          luckyResultActions.innerHTML = '';
-          const product = data.product;
-          const rerollBtn = document.createElement('button');
-          rerollBtn.type = 'button';
-          rerollBtn.className = 'btn btn-outline btn-lucky-reroll';
-          rerollBtn.textContent = 'Başka öner';
-          rerollBtn.addEventListener('click', () => {
-            pickLucky();
-          });
-          const reserveBtn = document.createElement('button');
-          reserveBtn.type = 'button';
-          reserveBtn.className = 'btn btn-reserve';
-          reserveBtn.textContent = 'Rezerve et';
-          reserveBtn.addEventListener('click', () => {
-            openReserveModal(product);
-            closeLuckyModal();
-          });
-          const takeBtn = document.createElement('button');
-          takeBtn.type = 'button';
-          takeBtn.className = 'btn btn-take';
-          takeBtn.textContent = 'Aldım';
-          takeBtn.addEventListener('click', () => {
-            closeLuckyModal();
-            takeProduct(product.id);
-          });
-          luckyResultActions.appendChild(rerollBtn);
-          luckyResultActions.appendChild(reserveBtn);
-          luckyResultActions.appendChild(takeBtn);
-        }
-      }
-    } else {
+    if (runId !== luckyRunId) return;
+
+    if (!res.ok || !data.product) {
       closeLuckyModal();
       alert(data.message || data.error || 'Stokta ürün yok.');
+      return;
+    }
+
+    const product = data.product;
+
+    if (luckySpinner) {
+      luckySpinner.setAttribute('hidden', '');
+      luckySpinner.setAttribute('aria-hidden', 'true');
+    }
+
+    if (luckyGifWrap && luckyGifImg) {
+      luckyGifImg.src = LUCKY_GIF_URL + '?t=' + String(Date.now());
+      luckyGifWrap.removeAttribute('hidden');
+    }
+
+    fillLuckyResult(product);
+
+    await new Promise((r) => setTimeout(r, LUCKY_GIF_DURATION_MS));
+    if (runId !== luckyRunId) return;
+
+    if (luckyGifWrap) {
+      luckyGifWrap.classList.add('lucky-gif-wrap--exit');
+      await new Promise((resolve) => {
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          luckyGifWrap.removeEventListener('transitionend', onEnd);
+          clearTimeout(fallback);
+          resolve();
+        };
+        function onEnd(e) {
+          if (e.propertyName === 'opacity') finish();
+        }
+        const fallback = setTimeout(finish, 600);
+        luckyGifWrap.addEventListener('transitionend', onEnd);
+      });
+    }
+    if (runId !== luckyRunId) return;
+
+    if (luckyGifWrap) {
+      luckyGifWrap.setAttribute('hidden', '');
+      luckyGifWrap.classList.remove('lucky-gif-wrap--exit');
+    }
+    if (luckyGifImg) luckyGifImg.removeAttribute('src');
+
+    if (luckyResult) {
+      luckyResult.removeAttribute('hidden');
+      requestAnimationFrame(() => {
+        if (runId !== luckyRunId || !luckyResult) return;
+        luckyResult.classList.add('lucky-result--visible');
+      });
     }
   } catch (err) {
+    if (runId !== luckyRunId) return;
     closeLuckyModal();
     alert(err.message || 'Seçim yapılamadı.');
   }
