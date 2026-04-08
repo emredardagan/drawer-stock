@@ -4,8 +4,15 @@ const { createClient } = require('@supabase/supabase-js');
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+const supabaseCacheControl = process.env.SUPABASE_CACHE_CONTROL || 'max-age=43200';
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  global: {
+    headers: {
+      'Cache-Control': supabaseCacheControl,
+    },
+  },
+});
 
 async function check() {
   const { data: c, error: e1 } = await supabase.from('consumptions').select('*').limit(2);

@@ -5,13 +5,20 @@ const { createClient } = require('@supabase/supabase-js');
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+const supabaseCacheControl = process.env.SUPABASE_CACHE_CONTROL || 'max-age=43200';
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('Supabase URL or Key is missing in .env file');
   process.exit(1);
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  global: {
+    headers: {
+      'Cache-Control': supabaseCacheControl,
+    },
+  },
+});
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 

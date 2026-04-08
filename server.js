@@ -10,13 +10,22 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY || '';
+const supabaseCacheControl = process.env.SUPABASE_CACHE_CONTROL || 'max-age=43200';
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('Supabase URL or Key is missing in environment variables');
 }
 
 // Only create client if URL and Key are provided to avoid crashing on boot
-const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
+const supabase = (supabaseUrl && supabaseKey)
+  ? createClient(supabaseUrl, supabaseKey, {
+      global: {
+        headers: {
+          'Cache-Control': supabaseCacheControl,
+        },
+      },
+    })
+  : null;
 
 // Helper to check if DB is configured
 function checkDb(req, res, next) {
