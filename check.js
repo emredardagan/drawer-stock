@@ -4,7 +4,7 @@ const { createClient } = require('@supabase/supabase-js');
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
-const supabaseCacheControl = process.env.SUPABASE_CACHE_CONTROL || 'max-age=43200';
+const supabaseCacheControl = process.env.SUPABASE_CACHE_CONTROL || 'max-age=43260';
 
 const supabase = createClient(supabaseUrl, supabaseKey, {
   global: {
