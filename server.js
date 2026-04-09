@@ -8,12 +8,46 @@ const app = express();
 const PORT = process.env.PORT || 3009;
 const HOST = process.env.HOST || '0.0.0.0';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY || '';
+function firstNonEmptyEnv(keys) {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (value && String(value).trim()) {
+      return { key, value: String(value).trim() };
+    }
+  }
+  return { key: null, value: '' };
+}
+
+const supabaseUrlEnv = firstNonEmptyEnv([
+  'NEXT_PUBLIC_SUPABASE_URL',
+  'SUPABASE_URL',
+]);
+const supabaseKeyEnv = firstNonEmptyEnv([
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'SUPABASE_SECRET_KEY',
+  'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY',
+  'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
+  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+  'SUPABASE_PUBLISHABLE_KEY',
+  'SUPABASE_ANON_KEY',
+]);
+const supabaseUrl = supabaseUrlEnv.value;
+const supabaseKey = supabaseKeyEnv.value;
 const supabaseCacheControl = process.env.SUPABASE_CACHE_CONTROL || 'max-age=43200';
+const supabaseProjectRef =
+  (supabaseUrl.match(/^https:\/\/([^.]+)\.supabase\.co/i) || [])[1] || 'unknown';
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('Supabase URL or Key is missing in environment variables');
+} else {
+  console.info(
+    `[Supabase] Using project "${supabaseProjectRef}" (url env: ${supabaseUrlEnv.key}, key env: ${supabaseKeyEnv.key})`
+  );
+  if (supabaseKeyEnv.key && supabaseKeyEnv.key.startsWith('NEXT_PUBLIC_')) {
+    console.warn(
+      '[Supabase] Server is using a public/publishable key. If RLS is enabled, queries may return empty arrays. Prefer SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SECRET_KEY on the server.'
+    );
+  }
 }
 
 // Only create client if URL and Key are provided to avoid crashing on boot
@@ -34,6 +68,42 @@ function checkDb(req, res, next) {
   }
   next();
 }
+
+app.get('/api/health/supabase', async (req, res) => {
+  if (!supabase) {
+    return res.status(500).json({
+      ok: false,
+      configured: false,
+      projectRef: supabaseProjectRef,
+      message: 'Supabase environment variables are missing',
+    });
+  }
+
+  const { error } = await supabase.from('products').select('id').limit(1);
+  const payload = {
+    ok: !error,
+    configured: true,
+    projectRef: supabaseProjectRef,
+    urlEnv: supabaseUrlEnv.key,
+    keyEnv: supabaseKeyEnv.key,
+  };
+
+  if (error) {
+    payload.error = {
+      code: error.code || null,
+      message: error.message || 'Unknown database error',
+    };
+  }
+
+  return res.status(error ? 500 : 200).json(payload);
+});
+
+app.use('/api', (req, res, next) => {
+  if (supabaseProjectRef && supabaseProjectRef !== 'unknown') {
+    res.setHeader('X-Supabase-Project-Ref', supabaseProjectRef);
+  }
+  next();
+});
 
 app.use('/api', checkDb);
 
@@ -675,10 +745,59 @@ app.delete('/api/products/:id', requireAdmin, async (req, res) => {
 
 const TEAMS_WEBHOOK_URL = process.env.TEAMS_WEBHOOK_URL || '';
 const WISHLIST_VOTE_THRESHOLD = 5;
+const wishlistItemsTableCandidates = Array.from(
+  new Set(
+    [
+      process.env.SUPABASE_WISHLIST_ITEMS_TABLE,
+      'wishlist_items',
+      'whislist_items',
+    ].filter(Boolean)
+  )
+);
+const wishlistVotesTableCandidates = Array.from(
+  new Set(
+    [
+      process.env.SUPABASE_WISHLIST_VOTES_TABLE,
+      'wishlist_votes',
+      'whislist_votes',
+    ].filter(Boolean)
+  )
+);
+let resolvedWishlistItemsTable = null;
+let resolvedWishlistVotesTable = null;
 if (TEAMS_WEBHOOK_URL.trim()) {
   console.log('[Wishlist] Teams webhook configured (URL length:', TEAMS_WEBHOOK_URL.length, ')');
 } else {
   console.log('[Wishlist] Teams webhook not configured (set TEAMS_WEBHOOK_URL in .env to enable)');
+}
+
+async function resolveSupabaseTableName(candidates) {
+  if (!supabase) return candidates[0];
+
+  for (const candidate of candidates) {
+    const { error } = await supabase.from(candidate).select('*').limit(1);
+    if (!error || error.code !== 'PGRST205') {
+      return candidate;
+    }
+  }
+
+  return candidates[0];
+}
+
+async function getWishlistItemsTable() {
+  if (!resolvedWishlistItemsTable) {
+    resolvedWishlistItemsTable = await resolveSupabaseTableName(wishlistItemsTableCandidates);
+    console.log('[Wishlist] Items table resolved as:', resolvedWishlistItemsTable);
+  }
+  return resolvedWishlistItemsTable;
+}
+
+async function getWishlistVotesTable() {
+  if (!resolvedWishlistVotesTable) {
+    resolvedWishlistVotesTable = await resolveSupabaseTableName(wishlistVotesTableCandidates);
+    console.log('[Wishlist] Votes table resolved as:', resolvedWishlistVotesTable);
+  }
+  return resolvedWishlistVotesTable;
 }
 
 // Helper to get user from token without requiring it
@@ -692,9 +811,12 @@ async function getUserFromToken(authHeader) {
 
 // Fetch wishlist items with vote counts (for internal use)
 async function getWishlistItemsWithVoteCounts() {
-  const { data: items, error: itemsError } = await supabase.from('wishlist_items').select('*');
+  const itemsTable = await getWishlistItemsTable();
+  const votesTable = await getWishlistVotesTable();
+
+  const { data: items, error: itemsError } = await supabase.from(itemsTable).select('*');
   if (itemsError || !items) return [];
-  const { data: votes, error: votesError } = await supabase.from('wishlist_votes').select('*');
+  const { data: votes, error: votesError } = await supabase.from(votesTable).select('*');
   if (votesError || !votes) return items.map(i => ({ ...i, upvoteCount: 0, downvoteCount: 0 }));
   return items.map(item => {
     const itemVotes = votes.filter(v => v.itemId === item.id);
@@ -747,21 +869,23 @@ async function notifyTeamsWishlistOverThreshold() {
 // Get wishlist items
 app.get('/api/wishlist-items', async (req, res) => {
   const userId = await getUserFromToken(req.headers.authorization);
+  const itemsTable = await getWishlistItemsTable();
+  const votesTable = await getWishlistVotesTable();
 
   const { data: items, error: itemsError } = await supabase
-    .from('wishlist_items')
+    .from(itemsTable)
     .select('*');
 
   if (itemsError) {
-    return sendDbError(req, res, itemsError, 'GET /api/wishlist-items -> wishlist_items');
+    return sendDbError(req, res, itemsError, `GET /api/wishlist-items -> ${itemsTable}`);
   }
 
   const { data: votes, error: votesError } = await supabase
-    .from('wishlist_votes')
+    .from(votesTable)
     .select('*');
 
   if (votesError) {
-    return sendDbError(req, res, votesError, 'GET /api/wishlist-items -> wishlist_votes');
+    return sendDbError(req, res, votesError, `GET /api/wishlist-items -> ${votesTable}`);
   }
 
   const { data: users, error: usersError } = await supabase
@@ -813,7 +937,8 @@ app.post('/api/wishlist-items', requireUser, async (req, res) => {
     addedAt: new Date().toISOString()
   };
 
-  const { error } = await supabase.from('wishlist_items').insert([newItem]);
+  const itemsTable = await getWishlistItemsTable();
+  const { error } = await supabase.from(itemsTable).insert([newItem]);
   if (error) {
     return res.status(500).json({ error: 'Failed to add wishlist item' });
   }
@@ -825,6 +950,7 @@ app.post('/api/wishlist-items', requireUser, async (req, res) => {
 app.post('/api/wishlist-items/:id/vote', requireUser, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
+  const votesTable = await getWishlistVotesTable();
 
   const requestedValueRaw = req.body && req.body.value;
   // Backwards compatibility: if no body is sent, treat it as old "toggle upvote".
@@ -839,7 +965,7 @@ app.post('/api/wishlist-items/:id/vote', requireUser, async (req, res) => {
   }
 
   const { data: existingVote, error: existingVoteError } = await supabase
-    .from('wishlist_votes')
+    .from(votesTable)
     .select('*')
     .eq('itemId', id)
     .eq('userId', userId)
@@ -853,7 +979,7 @@ app.post('/api/wishlist-items/:id/vote', requireUser, async (req, res) => {
     if (requestedValue === 0) {
       if (hasExistingVote) {
         const { error: delError } = await supabase
-          .from('wishlist_votes')
+          .from(votesTable)
           .delete()
           .eq('itemId', id)
           .eq('userId', userId);
@@ -866,7 +992,7 @@ app.post('/api/wishlist-items/:id/vote', requireUser, async (req, res) => {
       if (existingValue === requestedValue) {
         // Toggle off
         const { error: delError } = await supabase
-          .from('wishlist_votes')
+          .from(votesTable)
           .delete()
           .eq('itemId', id)
           .eq('userId', userId);
@@ -876,7 +1002,7 @@ app.post('/api/wishlist-items/:id/vote', requireUser, async (req, res) => {
 
       // Switch direction
       const { error: updateError } = await supabase
-        .from('wishlist_votes')
+        .from(votesTable)
         .update({ value: requestedValue })
         .eq('itemId', id)
         .eq('userId', userId);
@@ -889,7 +1015,7 @@ app.post('/api/wishlist-items/:id/vote', requireUser, async (req, res) => {
 
     // New vote
     const { error: insertError } = await supabase
-      .from('wishlist_votes')
+      .from(votesTable)
       .insert([{ itemId: id, userId, value: requestedValue }]);
     if (insertError) return sendDbError(req, res, insertError, 'POST /api/wishlist-items/:id/vote -> insert');
 
@@ -909,11 +1035,13 @@ app.post('/api/wishlist-items/:id/vote', requireUser, async (req, res) => {
 // Delete wishlist item (Admin only)
 app.delete('/api/wishlist-items/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
+  const itemsTable = await getWishlistItemsTable();
+  const votesTable = await getWishlistVotesTable();
   
   // Delete votes first due to foreign key constraints (if any, though we didn't specify them in schema, it's good practice)
-  await supabase.from('wishlist_votes').delete().eq('itemId', id);
+  await supabase.from(votesTable).delete().eq('itemId', id);
   
-  const { error } = await supabase.from('wishlist_items').delete().eq('id', id);
+  const { error } = await supabase.from(itemsTable).delete().eq('id', id);
   if (error) {
     return res.status(500).json({ error: 'Failed to delete wishlist item' });
   }
